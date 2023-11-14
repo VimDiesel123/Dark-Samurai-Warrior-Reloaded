@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <windows.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define BYTES_PER_PIXEL 4
 #define MAX(a, b) (a > b ? a : b)
@@ -22,6 +23,13 @@ typedef struct Dim {
   int width;
   int height;
 } Dim;
+
+typedef struct Input {
+  bool leftEndedDown;
+  bool rightEndedDown;
+  bool upEndedDown;
+  bool downEndedDown;
+} Input;
 
 typedef struct Color {
   float r;
@@ -45,12 +53,44 @@ Color color(float r, float g, float b, float a) {
 }
 
 static Win32Buffer global_backbuffer;
+static bool global_running;
 
-void win32_process_messages() {
+void win32_handle_key_input(MSG *msg, Input *input) {
+  unsigned int keyCode = msg->wParam;
+  bool wasDown = (msg->lParam & (1 << 30) != 0);
+  bool isDown = (msg->lParam & (1 << 31) == 0);
+
+  if (wasDown == isDown) return;
+
+  switch (keyCode) {
+    case VK_LEFT: {
+      input->leftEndedDown = true;
+    } break;
+    case VK_RIGHT: {
+      input->rightEndedDown = true;
+    } break;
+    case VK_DOWN: {
+      input->downEndedDown = true;
+    } break;
+    case VK_UP: {
+      input->upEndedDown = true;
+    } break;
+  }
+}
+
+void win32_process_messages(Input *input) {
   MSG msg = {0};
   while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-    TranslateMessage(&msg);
-    DispatchMessage(&msg);
+    switch (msg.message) {
+      case WM_KEYDOWN:
+      case WM_KEYUP: {
+        win32_handle_key_input(&msg, input);
+      } break;
+      default: {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+      } break;
+    }
   }
 }
 
@@ -110,6 +150,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
       EndPaint(hwnd, &ps);
     } break;
     case WM_DESTROY: {
+      global_running = false;
       PostQuitMessage(0);
     } break;
     default: {
@@ -121,7 +162,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
-  OutputDebugStringA("Hello, World!");
+  global_running = true;
 
   Win32Buffer global_backbuffer = {0};
   global_backbuffer.width = 960;
@@ -165,12 +206,30 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
   ShowWindow(hwnd, nCmdShow);
 
-  while (1) {
-    win32_process_messages();
+  int playerX = 200;
+  int playerY = 200;
+  int player_speed = 20;
 
-    draw_rectangle(&global_backbuffer, 200, 200, 30, 30, color(1.0f, 0.0f, 0.0f, 1.0f));
+  while (global_running) {
+    Input input = {0};
+    win32_process_messages(&input);
+
+    if (input.leftEndedDown) playerX -= player_speed;
+    if (input.rightEndedDown) playerX += player_speed;
+    if (input.upEndedDown) playerY += player_speed;
+    if (input.downEndedDown) playerY -= player_speed;
+    
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
+
+    // clear screen
+    draw_rectangle(&global_backbuffer, 0, 0, dim.width, dim.height,
+                   color(0.0f, 0.0f, 0.2f, 1.0f));
+
+    // draw player
+    draw_rectangle(&global_backbuffer, playerX, playerY, 30, 30,
+                   color(1.0f, 0.0f, 0.0f, 1.0f));
+
     win32_display_buffer_in_window(&global_backbuffer, dc, dim.width, dim.height);
     ReleaseDC(hwnd, dc);
   }
