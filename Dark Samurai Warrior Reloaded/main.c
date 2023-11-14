@@ -1,7 +1,7 @@
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <windows.h>
-#include <stdint.h>
-#include <stdbool.h>
 
 #define BYTES_PER_PIXEL 4
 #define MAX(a, b) (a > b ? a : b)
@@ -94,7 +94,8 @@ void win32_process_messages(Input *input) {
   }
 }
 
-void win32_display_buffer_in_window(Win32Buffer *buffer, HDC hdc, int windowWidth, int windowHeight) {
+void win32_display_buffer_in_window(Win32Buffer *buffer, HDC hdc,
+                                    int windowWidth, int windowHeight) {
   int marginX = 10;
   int marginY = 10;
 
@@ -119,16 +120,17 @@ Dim win32_get_window_dimensions(HWND window) {
   return result;
 }
 
-void draw_rectangle(Win32Buffer *buffer, int x, int y, int width, int height, Color color) {
+void draw_rectangle(Win32Buffer *buffer, int x, int y, int width, int height,
+                    Color color) {
   // clip the rectangle to the edges of the buffer.
   int minX = MAX(0, x);
   int maxX = MAX(MIN(buffer->width, x + width), 0);
   int minY = MAX(0, y);
   int maxY = MAX(MIN(buffer->height, y + height), 0);
 
-  char *row = ((char *)buffer->memory + (minX * BYTES_PER_PIXEL) + (minY * buffer->pitch));
-  for (int y = minY; y < maxY; y++) 
-  {
+  char *row = ((char *)buffer->memory + (minX * BYTES_PER_PIXEL) +
+               (minY * buffer->pitch));
+  for (int y = minY; y < maxY; y++) {
     unsigned int *pixel = (unsigned int *)row;
     for (int x = minX; x < maxX; x++) {
       int a_value = color.a * 255;
@@ -141,7 +143,8 @@ void draw_rectangle(Win32Buffer *buffer, int x, int y, int width, int height, Co
   }
 }
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
+                            LPARAM lParam) {
   LRESULT result = 0;
   switch (uMsg) {
     case WM_PAINT: {
@@ -161,7 +164,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
   return result;
 }
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+                    PWSTR pCmdLine, int nCmdShow) {
   global_running = true;
 
   Win32Buffer global_backbuffer = {0};
@@ -184,7 +188,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
       MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   assert(global_backbuffer.memory);
 
-
   const wchar_t CLASS_NAME[] = L"My Cool Window Class";
 
   WNDCLASS wc = {0};
@@ -197,8 +200,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
   HWND hwnd =
       CreateWindowEx(0, CLASS_NAME, L"Dark Samurai Warrior Reloaded",
                      WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-                     CW_USEDEFAULT, CW_USEDEFAULT,
-                     NULL, NULL, hInstance, NULL);
+                     CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 
   if (hwnd == NULL) {
     return 0;
@@ -218,7 +220,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     if (input.rightEndedDown) playerX += player_speed;
     if (input.upEndedDown) playerY += player_speed;
     if (input.downEndedDown) playerY -= player_speed;
-    
+
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
 
@@ -230,11 +232,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     draw_rectangle(&global_backbuffer, playerX, playerY, 30, 30,
                    color(1.0f, 0.0f, 0.0f, 1.0f));
 
-    win32_display_buffer_in_window(&global_backbuffer, dc, dim.width, dim.height);
+    win32_display_buffer_in_window(&global_backbuffer, dc, dim.width,
+                                   dim.height);
     ReleaseDC(hwnd, dc);
   }
 
   return 0;
 }
-
-
