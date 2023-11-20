@@ -48,6 +48,7 @@ typedef struct NPC {
   int x;
   int y;
   const char *Name;
+  Color color;
 } NPC;
 
 typedef struct Player {
@@ -97,7 +98,6 @@ void win32_handle_key_input(MSG *msg, Input *input) {
     case VK_TAB: {
       input->tabEndedDown = true;
     } break;
-     
   }
 
   input->lastInputTime = currentTime;
@@ -244,7 +244,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   State state = OVERWORLD;
 
-  NPC tim = {.Name = "Tim", .x = 400, .y = 600};
+  NPC tim = {.Name = "Tim",
+             .x = 400,
+             .y = 300,
+             .color = color(0.55f, 0.25f, 0.8f, 1.0f)};
   Player player = {.x = 200, .y = 200, .speed = 20};
 
   Input input = {0};
@@ -261,17 +264,20 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
 
-    const Color background = state == OVERWORLD
-                                 ? color(0.0f, 0.0f, 0.2f, 1.0f)
-                                 : color(0.5f, 0.9f, 0.6f, 1.0f);
+    const Color background = state == OVERWORLD ? color(0.0f, 0.0f, 0.2f, 1.0f)
+                                                : color(0.5f, 0.9f, 0.6f, 1.0f);
 
     // clear screen
-    draw_rectangle(&global_backbuffer, 0, 0, dim.width, dim.height,
-                   background);
+    draw_rectangle(&global_backbuffer, 0, 0, dim.width, dim.height, background);
 
     // draw player
     draw_rectangle(&global_backbuffer, player.x, player.y, 30, 30,
                    color(1.0f, 0.0f, 0.0f, 1.0f));
+
+    if (state == OVERWORLD) {
+      // draw TIM
+      draw_rectangle(&global_backbuffer, tim.x, tim.y, 20, 20, tim.color);
+    }
 
     win32_display_buffer_in_window(&global_backbuffer, dc, dim.width,
                                    dim.height);
