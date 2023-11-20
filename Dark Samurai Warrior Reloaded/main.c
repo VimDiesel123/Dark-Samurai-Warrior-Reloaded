@@ -29,6 +29,7 @@ typedef struct Input {
   bool rightEndedDown;
   bool upEndedDown;
   bool downEndedDown;
+  bool tabEndedDown;
 } Input;
 
 typedef struct Color {
@@ -67,6 +68,7 @@ static bool global_running;
 
 void win32_handle_key_input(MSG *msg, Input *input) {
   unsigned int keyCode = msg->wParam;
+
   bool wasDown = (msg->lParam & (1 << 30) != 0);
   bool isDown = (msg->lParam & (1 << 31) == 0);
 
@@ -85,6 +87,10 @@ void win32_handle_key_input(MSG *msg, Input *input) {
     case VK_UP: {
       input->upEndedDown = true;
     } break;
+    case VK_TAB: {
+      input->tabEndedDown = true;
+    } break;
+     
   }
 }
 
@@ -232,13 +238,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     if (input.rightEndedDown) player.x += player.speed;
     if (input.upEndedDown) player.y += player.speed;
     if (input.downEndedDown) player.y -= player.speed;
+    if (input.tabEndedDown) state = state == OVERWORLD ? BATTLE : OVERWORLD;
 
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
 
+    const Color background = state == OVERWORLD
+                                 ? color(0.0f, 0.0f, 0.2f, 1.0f)
+                                 : color(0.5f, 0.9f, 0.6f, 1.0f);
+
     // clear screen
     draw_rectangle(&global_backbuffer, 0, 0, dim.width, dim.height,
-                   color(0.0f, 0.0f, 0.2f, 1.0f));
+                   background);
 
     // draw player
     draw_rectangle(&global_backbuffer, player.x, player.y, 30, 30,
