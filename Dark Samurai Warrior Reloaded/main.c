@@ -4,6 +4,16 @@
 #include <windows.h>
 #include <intrin.h>
 
+#define BYTES_PER_PIXEL 4
+#define MAX(a, b) (a > b ? a : b)
+#define MIN(a, b) (a < b ? a : b)
+#define assert(expr) \
+  if (!(expr)) {     \
+    *(int *)0 = 0;   \
+  }
+
+#include "math.h"
+
 #define u8 uint8_t
 #define u16 uint16_t
 #define u32 uint32_t
@@ -14,13 +24,7 @@
 #define s32 int32_t
 #define s64 int64_t
 
-#define BYTES_PER_PIXEL 4
-#define MAX(a, b) (a > b ? a : b)
-#define MIN(a, b) (a < b ? a : b)
-#define assert(expr) \
-  if (!(expr)) {     \
-    *(int *)0 = 0;   \
-  }
+
 
 #define DEBOUNCE_DELAY 100
 
@@ -137,7 +141,6 @@ inline u32 bitscan_forward(u32 mask) {
   return result;
 }
 
-
 LoadedFile win32_load_file(char *filename) {
   LoadedFile result = {0};
   HANDLE file_handle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, 0,
@@ -224,30 +227,12 @@ inline V4 v4_color_from_u32(u32 color) {
   return result;
 }
 
-inline V4 v4_mul(V4 v4, float scaler) { 
-  V4 result = {0};
-  result.x = v4.x * scaler;
-  result.y = v4.y * scaler;
-  result.z = v4.z * scaler;
-  result.w = v4.w * scaler;
-  return result;
-}
-
 inline u32 u32_color_from_v4(V4 color) { 
   V4 color255 = v4_mul(color, 255.0f);
   u32 result = (((u32)color255.a << 24) |
                 ((u32)color255.r << 16) |
                 ((u32)color255.g << 8) |
                 ((u32)color255.b));
-  return result;
-}
-
-inline V4 v4_add(V4 a, V4 b) { 
-  V4 result = {0};
-  result.x = a.x + b.x;
-  result.y = a.y + b.y;
-  result.z = a.z + b.z;
-  result.w = a.w + b.w;
   return result;
 }
 
