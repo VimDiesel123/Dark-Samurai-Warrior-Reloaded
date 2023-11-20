@@ -53,6 +53,12 @@ typedef union V4 {
     float b;
     float a;
   };
+  struct {
+    float x;
+    float y;
+    float z;
+    float w;
+  };
 } V4;
 
 typedef enum State { OVERWORLD, BATTLE } State;
@@ -212,9 +218,36 @@ LoadedBitmap load_bitmap(char* filename) {
 inline V4 v4_color_from_u32(u32 color) {
   V4 result = {0};
   result.r = (float)((color >> 16) & 0xFF) / 255.0f;
-  result.g = (float)((color >> 16) & 0xFF) / 255.0f;
-  result.b = (float)((color >> 16) & 0xFF) / 255.0f;
-  result.a = (float)((color >> 16) & 0xFF) / 255.0f;
+  result.g = (float)((color >> 8) & 0xFF) / 255.0f;
+  result.b = (float)((color) & 0xFF) / 255.0f;
+  result.a = (float)((color >> 24) & 0xFF) / 255.0f;
+  return result;
+}
+
+inline V4 v4_mul(V4 v4, float scaler) { 
+  V4 result = {0};
+  result.x = v4.x * scaler;
+  result.y = v4.y * scaler;
+  result.z = v4.z * scaler;
+  result.w = v4.w * scaler;
+  return result;
+}
+
+inline u32 u32_color_from_v4(V4 color) { 
+  V4 color255 = v4_mul(color, 255.0f);
+  u32 result = (((u32)color255.a << 24) |
+                ((u32)color255.r << 16) |
+                ((u32)color255.g << 8) |
+                ((u32)color255.b));
+  return result;
+}
+
+inline V4 v4_add(V4 a, V4 b) { 
+  V4 result = {0};
+  result.x = a.x + b.x;
+  result.y = a.y + b.y;
+  result.z = a.z + b.z;
+  result.w = a.w + b.w;
   return result;
 }
 
@@ -234,7 +267,18 @@ void draw_bitmap(Win32Buffer *buffer, LoadedBitmap *bitmap, u32 pos_x, u32 pos_y
       V4 source_color = v4_color_from_u32(source_color_32);
       V4 dest_color = v4_color_from_u32(dest_color_32);
 
-      *dest_pixel++ = *source_pixel++;
+      // NOTE: This is a lerp on the source_color's alpha value because the alpha has already been premultiplied.
+      // lerp(a, t, b) = a * (1 - t) + b * t
+      // dest_color * (1 - source_color.a) + (source_color * source_color.a) <- the source color has already had its alpha premultiplied.
+      V4 result =
+          v4_add(v4_mul(dest_color, (1.0f - source_color.a)), source_color);
+
+      u32 color = u32_color_from_v4(result);
+      
+      *dest_pixel = color;
+
+      dest_pixel++;
+      source_pixel++;
     }
     source_row += bitmap->pitch;
     dest_row += buffer->pitch;
