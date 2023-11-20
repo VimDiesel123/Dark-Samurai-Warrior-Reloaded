@@ -44,11 +44,7 @@ Color color(float r, float g, float b, float a) {
   assert(b <= 1.0f && b >= 0.0f);
   assert(a <= 1.0f && a >= 0.0f);
 
-  Color result = {0};
-  result.r = r;
-  result.g = g;
-  result.b = b;
-  result.a = a;
+  Color result = {.r = r, .g = g, .b = b, .a = a};
   return result;
 }
 
@@ -112,11 +108,12 @@ void win32_display_buffer_in_window(Win32Buffer *buffer, HDC hdc,
 }
 
 Dim win32_get_window_dimensions(HWND window) {
-  Dim result = {0};
   RECT clientRect;
   GetClientRect(window, &clientRect);
-  result.height = clientRect.bottom - clientRect.top;
-  result.width = clientRect.right - clientRect.left;
+  Dim result = {
+      .height = clientRect.bottom - clientRect.top,
+      .width = clientRect.right - clientRect.left,
+  };
   return result;
 }
 
@@ -168,37 +165,37 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     PWSTR pCmdLine, int nCmdShow) {
   global_running = true;
 
-  Win32Buffer global_backbuffer = {0};
-  global_backbuffer.width = 960;
-  global_backbuffer.height = 540;
-  global_backbuffer.pitch = global_backbuffer.width * BYTES_PER_PIXEL;
-  BITMAPINFOHEADER header = {0};
-  header.biSize = sizeof(global_backbuffer.info.bmiHeader);
-  header.biWidth = global_backbuffer.width;
-  header.biHeight = global_backbuffer.height;
-  header.biPlanes = 1;
-  header.biBitCount = BYTES_PER_PIXEL * 8;
-  header.biCompression = BI_RGB;
+  Win32Buffer global_backbuffer = {
+      .width = 960,
+      .height = 540,
+      .pitch = global_backbuffer.width * BYTES_PER_PIXEL,
+      .memory = VirtualAlloc(
+          0,
+          global_backbuffer.width * global_backbuffer.height * BYTES_PER_PIXEL,
+          MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE),
+  };
 
-  BITMAPINFO info = {0};
-  info.bmiHeader = header;
-  global_backbuffer.info = info;
-  global_backbuffer.memory = VirtualAlloc(
-      0, global_backbuffer.width * global_backbuffer.height * BYTES_PER_PIXEL,
-      MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   assert(global_backbuffer.memory);
 
-  const wchar_t CLASS_NAME[] = L"My Cool Window Class";
+  BITMAPINFO info = {.bmiHeader = {
+                         .biSize = sizeof(global_backbuffer.info.bmiHeader),
+                         .biWidth = global_backbuffer.width,
+                         .biHeight = global_backbuffer.height,
+                         .biPlanes = 1,
+                         .biBitCount = BYTES_PER_PIXEL * 8,
+                         .biCompression = BI_RGB,
+                     }};
 
-  WNDCLASS wc = {0};
-  wc.lpfnWndProc = WindowProc;
-  wc.hInstance = hInstance;
-  wc.lpszClassName = CLASS_NAME;
+  global_backbuffer.info = info;
+
+  WNDCLASS wc = {.lpfnWndProc = WindowProc,
+                 .hInstance = hInstance,
+                 .lpszClassName = L"My Cool Window Class"};
 
   RegisterClass(&wc);
 
   HWND hwnd =
-      CreateWindowEx(0, CLASS_NAME, L"Dark Samurai Warrior Reloaded",
+      CreateWindowEx(0, wc.lpszClassName, L"Dark Samurai Warrior Reloaded",
                      WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
                      CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 
