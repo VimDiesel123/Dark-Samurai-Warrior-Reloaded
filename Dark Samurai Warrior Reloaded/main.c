@@ -11,6 +11,8 @@
     *(int *)0 = 0;   \
   }
 
+#define DEBOUNCE_DELAY 100
+
 typedef struct Win32Buffer {
   BITMAPINFO info;
   int width;
@@ -30,6 +32,7 @@ typedef struct Input {
   bool upEndedDown;
   bool downEndedDown;
   bool tabEndedDown;
+  DWORD lastInputTime;
 } Input;
 
 typedef struct Color {
@@ -74,6 +77,10 @@ void win32_handle_key_input(MSG *msg, Input *input) {
 
   if (wasDown == isDown) return;
 
+  DWORD currentTime = GetTickCount();
+
+  if ((currentTime - input->lastInputTime) < DEBOUNCE_DELAY) return;
+
   switch (keyCode) {
     case VK_LEFT: {
       input->leftEndedDown = true;
@@ -92,6 +99,8 @@ void win32_handle_key_input(MSG *msg, Input *input) {
     } break;
      
   }
+
+  input->lastInputTime = currentTime;
 }
 
 void win32_process_messages(Input *input) {
@@ -181,6 +190,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   return result;
 }
 
+void reset_input(Input *input) {
+  input->downEndedDown = 0;
+  input->leftEndedDown = 0;
+  input->rightEndedDown = 0;
+  input->upEndedDown = 0;
+  input->tabEndedDown = 0;
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     PWSTR pCmdLine, int nCmdShow) {
   global_running = true;
@@ -230,8 +247,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   NPC tim = {.Name = "Tim", .x = 400, .y = 600};
   Player player = {.x = 200, .y = 200, .speed = 20};
 
+  Input input = {0};
   while (global_running) {
-    Input input = {0};
+    reset_input(&input);
     win32_process_messages(&input);
 
     if (input.leftEndedDown) player.x -= player.speed;
