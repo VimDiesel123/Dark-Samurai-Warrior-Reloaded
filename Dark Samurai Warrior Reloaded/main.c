@@ -38,6 +38,20 @@ typedef struct Color {
   float a;
 } Color;
 
+typedef enum State { OVERWORLD, BATTLE } State;
+
+typedef struct NPC {
+  int x;
+  int y;
+  const char *Name;
+} NPC;
+
+typedef struct Player {
+  int x;
+  int y;
+  int speed;
+} Player;
+
 Color color(float r, float g, float b, float a) {
   assert(r <= 1.0f && r >= 0.0f);
   assert(g <= 1.0f && g >= 0.0f);
@@ -205,18 +219,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   ShowWindow(hwnd, nCmdShow);
 
-  int playerX = 200;
-  int playerY = 200;
-  int player_speed = 20;
+  State state = OVERWORLD;
+
+  NPC tim = {.Name = "Tim", .x = 400, .y = 600};
+  Player player = {.x = 200, .y = 200, .speed = 20};
 
   while (global_running) {
     Input input = {0};
     win32_process_messages(&input);
 
-    if (input.leftEndedDown) playerX -= player_speed;
-    if (input.rightEndedDown) playerX += player_speed;
-    if (input.upEndedDown) playerY += player_speed;
-    if (input.downEndedDown) playerY -= player_speed;
+    if (input.leftEndedDown) player.x -= player.speed;
+    if (input.rightEndedDown) player.x += player.speed;
+    if (input.upEndedDown) player.y += player.speed;
+    if (input.downEndedDown) player.y -= player.speed;
 
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
@@ -226,7 +241,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    color(0.0f, 0.0f, 0.2f, 1.0f));
 
     // draw player
-    draw_rectangle(&global_backbuffer, playerX, playerY, 30, 30,
+    draw_rectangle(&global_backbuffer, player.x, player.y, 30, 30,
                    color(1.0f, 0.0f, 0.0f, 1.0f));
 
     win32_display_buffer_in_window(&global_backbuffer, dc, dim.width,
