@@ -17,6 +17,9 @@
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="render.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\assets\guy.bmp">
@@ -25,6 +28,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="math.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="common.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="render.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
