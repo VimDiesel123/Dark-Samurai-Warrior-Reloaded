@@ -31,7 +31,7 @@ void draw_bitmap(LoadedBitmap *buffer, LoadedBitmap *bitmap, u32 pos_x,
     u32 *dest_pixel = (u32 *)dest_row;
     for (s32 x = 0; x < bitmap->width; x++) {
       u32 source_color_32 = *source_pixel;
-      u32 dest_color_32 = *dest_row;
+      u32 dest_color_32 = *dest_pixel;
 
       V4 source_color = v4_color_from_u32(source_color_32);
       V4 dest_color = v4_color_from_u32(dest_color_32);

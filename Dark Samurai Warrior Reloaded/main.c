@@ -25,6 +25,7 @@ typedef struct Input {
   bool downEndedDown;
   bool tabEndedDown;
   DWORD lastInputTime;
+  float seconds_per_frame;
 } Input;
 
 typedef enum State { OVERWORLD, BATTLE } State;
@@ -44,6 +45,9 @@ typedef struct Player {
 
 static Win32Buffer global_backbuffer;
 static bool global_running;
+// NOTE: This is a value that tells you how often Windows queries performance counters. It is determined at system boot and never changes, so it only needs to be set once at startup. Read more here:
+// https://learn.microsoft.com/en-us/windows/win32/api/profileapi/nf-profileapi-queryperformancefrequency
+static u32 performance_frequency;
 
 typedef struct LoadedFile {
   size_t size;
@@ -74,6 +78,25 @@ typedef struct BitmapHeader {
   u32 blue_mask;
 } BitmapHeader;
 #pragma pack(pop)
+
+inline void win32_initialize_performance_frequency() {
+  LARGE_INTEGER performance_frequency_result;
+  QueryPerformanceFrequency(&performance_frequency_result);
+  performance_frequency = performance_frequency_result.QuadPart;
+}
+
+inline LARGE_INTEGER win32_get_wall_clock() { 
+  LARGE_INTEGER result;
+  QueryPerformanceCounter(&result);
+  return result;
+}
+
+inline float win32_get_seconds_elapsed(LARGE_INTEGER start,
+                                       LARGE_INTEGER end)
+{
+  float result = ((float)(end.QuadPart - start.QuadPart) / (float)performance_frequency);
+  return result;
+}
 
 LoadedFile win32_load_file(char *filename) {
   LoadedFile result = {0};
@@ -122,7 +145,6 @@ LoadedBitmap load_bitmap(char* filename) {
     for (int x = 0; x < result.width; x++) {
       u32 color = *source;
 
-      // TODO: Premultiply alpha
       float red_value = (color & red_mask) >> red_index;
       float green_value = (color & green_mask) >> green_index;
       float blue_value = (color & blue_mask) >> blue_index;
@@ -258,6 +280,8 @@ void reset_input(Input *input) {
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     PWSTR pCmdLine, int nCmdShow) {
   global_running = true;
+  
+  win32_initialize_performance_frequency();
 
   Win32Buffer global_backbuffer = {
       .bitmap.width = 960,
@@ -278,9 +302,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                          .biCompression = BI_RGB,
                      }};
   global_backbuffer.info = info;
-  global_backbuffer.bitmap.memory = VirtualAlloc(
-      0, global_backbuffer.bitmap.width * global_backbuffer.bitmap.height * BYTES_PER_PIXEL,
-      MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   assert(global_backbuffer.bitmap.memory);
 
   WNDCLASS wc = {.lpfnWndProc = WindowProc,
@@ -300,6 +321,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   ShowWindow(hwnd, nCmdShow);
 
+  float target_seconds_per_frame = 1.0f / 60.0f;
+
+  LARGE_INTEGER last_counter = win32_get_wall_clock();
+
+  UINT desired_scheduler_ms = 1;
+  bool sleep_is_granular = timeBeginPeriod(desired_scheduler_ms) == TIMERR_NOERROR;
+
   State state = OVERWORLD;
 
   NPC tim = {.Name = "Tim",
@@ -315,32 +343,57 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   Input input = {0};
   while (global_running) {
+    input.seconds_per_frame = target_seconds_per_frame;
+
     reset_input(&input);
     win32_process_messages(&input);
 
+    LARGE_INTEGER counter = win32_get_wall_clock();
+    
     if (input.leftEndedDown) player.x -= player.speed;
     if (input.rightEndedDown) player.x += player.speed;
     if (input.upEndedDown) player.y += player.speed;
     if (input.downEndedDown) player.y -= player.speed;
     if (input.tabEndedDown) state = state == OVERWORLD ? BATTLE : OVERWORLD;
-
+    
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
 
-    const V4 background = state == OVERWORLD ? v4(0.0f, 0.0f, 0.2f, 1.0f)
-                                                : v4(0.5f, 0.9f, 0.6f, 1.0f);
+    const V4 background = state == OVERWORLD ? v4(0.5f, 0.9f, 0.6f, 1.0f)
+                                             : v4(0.0f, 0.0f, 0.2f, 1.0f);
 
     // clear screen
     draw_rectangle(&global_backbuffer.bitmap, 0, 0, dim.width, dim.height,
-                   v4(0.0f, 0.0f, 0.2f, 1.0f));
+                   background);
 
     // draw player
     draw_bitmap(&global_backbuffer.bitmap, &guy_bmp, player.x, player.y);
 
     if (state == OVERWORLD) {
       // draw TIM
-      draw_rectangle(&global_backbuffer, tim.x, tim.y, 20, 20, tim.color);
+      draw_rectangle(&global_backbuffer.bitmap, tim.x, tim.y, 20, 20,
+                     tim.color);
     }
+
+    // TODO: This frame-rate code is still very incomplete, but it is at least enforcing a frame rate for now.
+    LARGE_INTEGER work_counter = win32_get_wall_clock();
+    float seconds_elapsed_this_frame =
+        win32_get_seconds_elapsed(counter, work_counter);
+    if (seconds_elapsed_this_frame < target_seconds_per_frame) {
+      DWORD ms_to_sleep = (DWORD)(1000.f * (target_seconds_per_frame -
+                                            seconds_elapsed_this_frame));
+      if (ms_to_sleep) Sleep(ms_to_sleep);
+    } else {
+      // TODO: Missed Framerate. Should log here or something maybe.
+    }
+    LARGE_INTEGER end_counter = win32_get_wall_clock();
+    float frame_time =
+        1000.0f * win32_get_seconds_elapsed(counter, end_counter);
+    char frame_time_buffer[100];
+    sprintf_s(frame_time_buffer, sizeof(frame_time_buffer), "Frame Time: %.2f \n",
+              frame_time);
+    OutputDebugStringA(frame_time_buffer);
+    last_counter = end_counter;
 
     win32_display_buffer_in_window(&global_backbuffer, dc, dim.width,
                                    dim.height);
