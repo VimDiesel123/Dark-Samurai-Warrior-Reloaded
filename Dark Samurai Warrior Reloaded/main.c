@@ -152,7 +152,7 @@ LoadedFile win32_load_file(char *filename) {
   result.memory =
       VirtualAlloc(0, file_size32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   DWORD bytes_read;
-  ReadFile(file_handle, result.memory, file_size32, &bytes_read, 0);
+  assert(ReadFile(file_handle, result.memory, file_size32, &bytes_read, 0));
   assert(bytes_read == file_size32);
   result.size = file_size32;
 
@@ -160,15 +160,14 @@ LoadedFile win32_load_file(char *filename) {
 }
 
 LoadedBitmap load_bitmap(char* filename) { 
-  LoadedBitmap result = {0};
   LoadedFile file = win32_load_file(filename);
   assert(file.size > 0);
   BitmapHeader *header = (BitmapHeader *)file.memory;
   u32 *pixels = (u32 *)((char *)file.memory + header->bitmap_offset);
-  result.memory = pixels;
-  result.width = header->width;
-  result.height = header->height;
-  result.pitch = header->width * (header->bits_per_pixel / 8);
+  LoadedBitmap result = {.memory = pixels,
+                         .width = header->width,
+                         .height = header->height,
+                         .pitch = header->width * (header->bits_per_pixel / 8)};
 
   // There are multiple kinds of bitmap compression. We're only going to handle one kind right now, which is an uncompressed bitmap.
   // For more info: https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv4header
@@ -219,11 +218,10 @@ LoadedBitmap load_bitmap(char* filename) {
 }
 
 inline V4 v4_color_from_u32(u32 color) {
-  V4 result = {0};
-  result.r = (float)((color >> 16) & 0xFF) / 255.0f;
-  result.g = (float)((color >> 8) & 0xFF) / 255.0f;
-  result.b = (float)((color) & 0xFF) / 255.0f;
-  result.a = (float)((color >> 24) & 0xFF) / 255.0f;
+  V4 result = {.r = (float)((color >> 16) & 0xFF) / 255.0f,
+               .g = (float)((color >> 8) & 0xFF) / 255.0f,
+               .b = (float)((color)&0xFF) / 255.0f,
+               .a = (float)((color >> 24) & 0xFF) / 255.0f};
   return result;
 }
 
@@ -476,10 +474,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    v4(0.0f, 0.0f, 0.2f, 1.0f));
 
     // draw player
-    draw_rectangle(&global_backbuffer, playerX, playerY, 30, 30,
-                   v4(1.0f, 0.0f, 0.0f, 1.0f));
-
-    draw_bitmap(&global_backbuffer, &guy_bmp, 100, 100);
+    draw_bitmap(&global_backbuffer, &guy_bmp, playerX, playerY);
 
     if (state == OVERWORLD) {
       // draw TIM
