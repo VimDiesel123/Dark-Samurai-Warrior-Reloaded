@@ -79,6 +79,90 @@ typedef struct BitmapHeader {
 } BitmapHeader;
 #pragma pack(pop)
 
+typedef struct Glyph {
+  LoadedBitmap *bitmap;
+  int advance_width;
+} Glyph;
+
+Glyph win32_get_glyph(char *filename, char *font_name, u32 code_point) {
+  Glyph result = {.bitmap = (LoadedBitmap *)malloc(sizeof(LoadedBitmap))};
+  int max_width = 256;
+  int max_height = 256;
+  HDC dc = 0;
+  TEXTMETRIC text_metric = {0};
+  HBITMAP bitmap = 0;
+  HFONT font = 0;
+  VOID *bits = 0;
+  if (!dc) {
+    font =
+        CreateFontA(32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, font_name);
+    assert(font);
+    dc = CreateCompatibleDC(GetDC(0));
+    BITMAPINFO info = {
+        .bmiHeader =
+            {
+                .biSize = sizeof(info.bmiHeader),
+                .biWidth = max_width,
+                .biHeight = max_height,
+                .biPlanes = 1,
+                .biBitCount = 32,
+                .biCompression = BI_RGB,
+            },
+    };
+    bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits, 0, 0);
+    SelectObject(dc, bitmap);
+    SelectObject(dc, font);
+    SetBkColor(dc, RGB(0, 0, 0));
+    GetTextMetrics(dc, &text_metric);
+  }
+
+  SIZE size;
+  wchar_t cheese_point = (wchar_t)code_point;
+  assert(GetTextExtentPoint32W(dc, &cheese_point, 1, &size));
+  int width = MIN(size.cx, max_width);
+  int height = MIN(size.cy, max_height);
+
+  // TODO: Specify color
+  SetTextColor(dc, RGB(255, 255, 255));
+  assert(TextOut(dc, 0, 0, &cheese_point, 1));
+
+  // TODO: clip the bitmap
+  result.bitmap->width = max_width;
+  result.bitmap->height = max_height;
+  result.bitmap->pitch = result.bitmap->width * BYTES_PER_PIXEL;
+  result.bitmap->memory = malloc(max_width * max_height * BYTES_PER_PIXEL);
+
+  char *dest_row = (char *)result.bitmap->memory + ((result.bitmap->height - 1) * result.bitmap->pitch);
+  for (int y = 0; y < max_height; y++) {
+    u32 *dest = (u32 *)dest_row;
+    for (int x = 0; x < max_width; x++) {
+
+      // TODO: cleartype antialiasing
+      COLORREF pixel = GetPixel(dc, x, y);
+      char alpha = (char)(pixel & 0xFF);
+
+      u32 color = ((alpha << 24) | (alpha << 16) | (alpha << 8) | (alpha << 0));
+      *dest++ = color;
+    }
+    dest_row -= result.bitmap->pitch;
+  }
+
+  ABC abc[2];
+  assert(GetCharABCWidthsA(dc, 'a', 'b', abc));
+  result.advance_width = abc[1].abcA + abc[1].abcB + abc[1].abcC;
+
+  DeleteObject(bitmap);
+  DeleteObject(font);
+  if (dc) {
+    DeleteDC(dc);
+    dc = 0;
+  }
+
+  return result;
+}
+
 inline void win32_initialize_performance_frequency() {
   LARGE_INTEGER performance_frequency_result;
   QueryPerformanceFrequency(&performance_frequency_result);
@@ -283,6 +367,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   
   win32_initialize_performance_frequency();
 
+  Glyph test = win32_get_glyph(NULL, "Arial", 'a');
+
   Win32Buffer global_backbuffer = {
       .bitmap.width = 960,
       .bitmap.height = 540,
@@ -368,6 +454,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     // draw player
     draw_bitmap(&global_backbuffer.bitmap, &guy_bmp, player.x, player.y);
+
+    draw_bitmap(&global_backbuffer.bitmap, test.bitmap, 150, 150);
 
     if (state == OVERWORLD) {
       // draw TIM
