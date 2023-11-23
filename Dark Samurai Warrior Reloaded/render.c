@@ -77,3 +77,20 @@ void draw_rectangle(LoadedBitmap *buffer, int x, int y, int width, int height,
     row += buffer->pitch;
   }
 }
+
+
+void draw_string(LoadedBitmap* buffer, Font *font, u32 x, u32 y, char* string) { 
+  char *c = string;
+  Glyph *glyphs = font->glyphs;
+  s32 current_x = x;
+  s32 current_y = y;
+  while (*c) {
+    char character = *c;
+    assert(character >= '!' && character <= '~');
+    Glyph glyph = *(glyphs + character);
+    current_x += glyph.x_pre_step;
+    draw_bitmap(buffer, glyph.bitmap, current_x, current_y - glyph.ascent);
+    current_x += glyph.advance_width;
+    c++;
+  }
+}

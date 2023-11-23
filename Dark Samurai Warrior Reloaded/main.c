@@ -79,12 +79,7 @@ typedef struct BitmapHeader {
 } BitmapHeader;
 #pragma pack(pop)
 
-typedef struct Glyph {
-  LoadedBitmap *bitmap;
-  int advance_width;
-} Glyph;
-
-Glyph win32_get_glyph(char *filename, char *font_name, u32 code_point) {
+Glyph win32_get_glyph(char *font_name, u32 code_point) {
   Glyph result = {.bitmap = (LoadedBitmap *)malloc(sizeof(LoadedBitmap))};
   int max_width = 256;
   int max_height = 256;
@@ -97,7 +92,7 @@ Glyph win32_get_glyph(char *filename, char *font_name, u32 code_point) {
     font =
         CreateFontA(32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                    DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, font_name);
+                    ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, font_name);
     assert(font);
     dc = CreateCompatibleDC(GetDC(0));
     BITMAPINFO info = {
@@ -123,25 +118,50 @@ Glyph win32_get_glyph(char *filename, char *font_name, u32 code_point) {
   assert(GetTextExtentPoint32W(dc, &cheese_point, 1, &size));
   int width = MIN(size.cx, max_width);
   int height = MIN(size.cy, max_height);
-
   // TODO: Specify color
   SetTextColor(dc, RGB(255, 255, 255));
   assert(TextOut(dc, 0, 0, &cheese_point, 1));
 
-  // TODO: clip the bitmap
-  result.bitmap->width = max_width;
-  result.bitmap->height = max_height;
-  result.bitmap->pitch = result.bitmap->width * BYTES_PER_PIXEL;
-  result.bitmap->memory = malloc(max_width * max_height * BYTES_PER_PIXEL);
+  int max_x = INT16_MIN;
+  int max_y = INT16_MIN;
+  int min_x = INT16_MAX;
+  int min_y = INT16_MAX;
 
-  char *dest_row = (char *)result.bitmap->memory + ((result.bitmap->height - 1) * result.bitmap->pitch);
-  for (int y = 0; y < max_height; y++) {
+  // NOTE: Preadvancing by max_height - 1 because I want to start at the last row of the bitmap and go up with each iteration of y.
+  u32 *row = (u32 *)bits + (max_height - 1) * max_width;
+  // We drew the glyph in a bitmap that is too large for it, now we find the bounding box for the non-zero pixel values.
+  for (int y = 0; y < height; y++) {
+    u32 *pixel = row;
+    for (int x = 0; x < width; x++) {
+      if (*pixel != 0) {
+        max_x = max(max_x, x);
+        max_y = max(max_y, y);
+        min_x = min(min_x, x);
+        min_y = min(min_y, y);
+      }
+      pixel++;
+    }
+    row -= max_width;
+  }
+
+  width = max_x - min_x + 1;
+  height = max_y - min_y + 1;
+
+  result.bitmap->width = width;
+  result.bitmap->height = height;
+  result.bitmap->pitch = result.bitmap->width * BYTES_PER_PIXEL;
+  size_t bitmap_size = width * height * BYTES_PER_PIXEL;
+  result.bitmap->memory = malloc(bitmap_size);
+  memset(result.bitmap->memory, 0, sizeof(bitmap_size));
+
+  char *dest_row = (char *)result.bitmap->memory + (height - 1) * result.bitmap->pitch;
+  for (int y = min_y; y <= max_y; y++) {
     u32 *dest = (u32 *)dest_row;
-    for (int x = 0; x < max_width; x++) {
+    for (int x = min_x; x <= max_x; x++) {
 
       // TODO: cleartype antialiasing
       COLORREF pixel = GetPixel(dc, x, y);
-      char alpha = (char)(pixel & 0xFF);
+      u32 alpha = ((pixel >> 16) & 0xFF);
 
       u32 color = ((alpha << 24) | (alpha << 16) | (alpha << 8) | (alpha << 0));
       *dest++ = color;
@@ -149,9 +169,13 @@ Glyph win32_get_glyph(char *filename, char *font_name, u32 code_point) {
     dest_row -= result.bitmap->pitch;
   }
 
-  ABC abc[2];
-  assert(GetCharABCWidthsA(dc, 'a', 'b', abc));
-  result.advance_width = abc[1].abcA + abc[1].abcB + abc[1].abcC;
+  // TODO: Support non mono-spaced fonts. To do this I believe I will need to extract the entire kerning table for the font and store it in some kind of hash table
+  // or array of pairs to look up later when drawing the fonts.
+  ABC abc;
+  assert(GetCharABCWidthsA(dc, code_point, code_point, &abc));
+  result.advance_width = abc.abcB + abc.abcC;
+  result.ascent = max_y - (size.cy - text_metric.tmDescent);
+  result.x_pre_step = abc.abcA;
 
   DeleteObject(bitmap);
   DeleteObject(font);
@@ -160,6 +184,15 @@ Glyph win32_get_glyph(char *filename, char *font_name, u32 code_point) {
     dc = 0;
   }
 
+  return result;
+}
+
+Font win32_load_font(char *font_name) {
+  Font result = {0};
+  // TODO: I am only loading the "drawable" ASCII characters.
+  for (char c = '!'; c < '~'; c++) {
+    result.glyphs[c] = win32_get_glyph(font_name, (wchar_t)(c));
+  }
   return result;
 }
 
@@ -367,7 +400,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   
   win32_initialize_performance_frequency();
 
-  Glyph test = win32_get_glyph(NULL, "Arial", 'a');
+  Font test_font = win32_load_font("Consolas");
 
   Win32Buffer global_backbuffer = {
       .bitmap.width = 960,
@@ -455,7 +488,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     // draw player
     draw_bitmap(&global_backbuffer.bitmap, &guy_bmp, player.x, player.y);
 
-    draw_bitmap(&global_backbuffer.bitmap, test.bitmap, 150, 150);
+    draw_string(&global_backbuffer.bitmap, test_font, 100, 100, "jiggly");
 
     if (state == OVERWORLD) {
       // draw TIM
