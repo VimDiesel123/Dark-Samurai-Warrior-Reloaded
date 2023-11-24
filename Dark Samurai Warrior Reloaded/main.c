@@ -1,24 +1,16 @@
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <windows.h>
-
-#define BYTES_PER_PIXEL 4
-#define MAX(a, b) (a > b ? a : b)
-#define MIN(a, b) (a < b ? a : b)
-#define assert(expr) \
-  if (!(expr)) {     \
-    *(int *)0 = 0;   \
-  }
+#include <intrin.h>
+#include "common.h"
+#include "math.h"
+#include "render.h"
 
 #define DEBOUNCE_DELAY 100
 
 typedef struct Win32Buffer {
   BITMAPINFO info;
-  int width;
-  int height;
-  int pitch;
-  void *memory;
+  LoadedBitmap bitmap;
 } Win32Buffer;
 
 typedef struct Dim {
@@ -35,20 +27,13 @@ typedef struct Input {
   DWORD lastInputTime;
 } Input;
 
-typedef struct Color {
-  float r;
-  float g;
-  float b;
-  float a;
-} Color;
-
 typedef enum State { OVERWORLD, BATTLE } State;
 
 typedef struct NPC {
   int x;
   int y;
   const char *Name;
-  Color color;
+  V4 color;
 } NPC;
 
 typedef struct Player {
@@ -57,22 +42,117 @@ typedef struct Player {
   int speed;
 } Player;
 
-Color color(float r, float g, float b, float a) {
-  assert(r <= 1.0f && r >= 0.0f);
-  assert(g <= 1.0f && g >= 0.0f);
-  assert(b <= 1.0f && b >= 0.0f);
-  assert(a <= 1.0f && a >= 0.0f);
-
-  Color result = {.r = r, .g = g, .b = b, .a = a};
-  return result;
-}
-
 static Win32Buffer global_backbuffer;
 static bool global_running;
 
-void win32_handle_key_input(MSG *msg, Input *input) {
-  unsigned int keyCode = msg->wParam;
+typedef struct LoadedFile {
+  size_t size;
+  void *memory;
+} LoadedFile;
 
+#pragma pack(push, 1)
+typedef struct BitmapHeader {
+  u16 file_type;
+  u32 file_size;
+  u16 reserved1;
+  u16 reserved2;
+  u32 bitmap_offset;
+  u32 size;
+  s32 width;
+  s32 height;
+  u16 planes;
+  u16 bits_per_pixel;
+  u32 compression;
+  u32 size_of_bitmap;
+  s32 horz_resolution;
+  s32 vert_resolution;
+  u32 colors_used;
+  u32 colors_important;
+
+  u32 red_mask;
+  u32 green_mask;
+  u32 blue_mask;
+} BitmapHeader;
+#pragma pack(pop)
+
+LoadedFile win32_load_file(char *filename) {
+  LoadedFile result = {0};
+  HANDLE file_handle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, 0,
+                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  assert(file_handle != INVALID_HANDLE_VALUE);
+  LARGE_INTEGER file_size64;
+  assert(GetFileSizeEx(file_handle, &file_size64) != INVALID_FILE_SIZE);
+  size_t file_size32 = file_size64.QuadPart;
+  result.memory =
+      VirtualAlloc(0, file_size32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  DWORD bytes_read;
+  assert(ReadFile(file_handle, result.memory, file_size32, &bytes_read, 0));
+  assert(bytes_read == file_size32);
+  result.size = file_size32;
+
+  return result;
+}
+
+LoadedBitmap load_bitmap(char* filename) { 
+  LoadedFile file = win32_load_file(filename);
+  assert(file.size > 0);
+  BitmapHeader *header = (BitmapHeader *)file.memory;
+  u32 *pixels = (u32 *)((char *)file.memory + header->bitmap_offset);
+  LoadedBitmap result = {.memory = pixels,
+                         .width = header->width,
+                         .height = header->height,
+                         .pitch = header->width * (header->bits_per_pixel / 8)};
+
+  // There are multiple kinds of bitmap compression. We're only going to handle one kind right now, which is an uncompressed bitmap.
+  // For more info: https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv4header
+  assert(header->compression == 3);
+
+  u32 red_mask = header->red_mask;
+  u32 green_mask = header->green_mask;
+  u32 blue_mask = header->blue_mask;
+  u32 alpha_mask = ~(red_mask | green_mask | blue_mask);
+
+  u32 red_index = bitscan_forward(red_mask);
+  u32 green_index = bitscan_forward(green_mask);
+  u32 blue_index = bitscan_forward(blue_mask);
+  u32 alpha_index = bitscan_forward(alpha_mask);
+
+  u32 *source = pixels;
+  for (int y = 0; y < result.height; y++) {
+    for (int x = 0; x < result.width; x++) {
+      u32 color = *source;
+
+      // TODO: Premultiply alpha
+      float red_value = (color & red_mask) >> red_index;
+      float green_value = (color & green_mask) >> green_index;
+      float blue_value = (color & blue_mask) >> blue_index;
+      float alpha_value = (color & alpha_mask) >> alpha_index;
+
+      red_value /= 255.0f;
+      green_value /= 255.0f;
+      blue_value /= 255.0f;
+      alpha_value /= 255.0f;
+
+      red_value *= alpha_value;
+      green_value *= alpha_value;
+      blue_value *= alpha_value;
+
+      red_value *= 255.0f;
+      green_value *= 255.0f;
+      blue_value *= 255.0f;
+      alpha_value *= 255.0f;
+
+      *source++ = (((u32)alpha_value << 24) | ((u32)red_value << 16) |
+                   ((u32)green_value << 8) | ((u32)blue_value));
+
+
+    }
+  }
+  return result;
+}
+
+void win32_handle_key_input(MSG *msg, Input *input) {
+  u32 keyCode = msg->wParam;
   bool wasDown = (msg->lParam & (1 << 30) != 0);
   bool isDown = (msg->lParam & (1 << 31) == 0);
 
@@ -126,13 +206,13 @@ void win32_display_buffer_in_window(Win32Buffer *buffer, HDC hdc,
 
   // Draw black rectangles around the edges of the buffer to add "margin"
   PatBlt(hdc, 0, 0, windowWidth, marginY, BLACKNESS);
-  PatBlt(hdc, 0, marginY + buffer->height, windowWidth, windowHeight,
+  PatBlt(hdc, 0, marginY + buffer->bitmap.height, windowWidth, windowHeight,
          BLACKNESS);
   PatBlt(hdc, 0, 0, marginX, windowHeight, BLACKNESS);
-  PatBlt(hdc, marginX + buffer->width, 0, windowWidth, windowHeight, BLACKNESS);
+  PatBlt(hdc, marginX + buffer->bitmap.width, 0, windowWidth, windowHeight, BLACKNESS);
 
-  StretchDIBits(hdc, marginX, marginY, buffer->width, buffer->height, 0, 0,
-                buffer->width, buffer->height, buffer->memory, &buffer->info,
+  StretchDIBits(hdc, marginX, marginY, buffer->bitmap.width, buffer->bitmap.height, 0, 0,
+                buffer->bitmap.width, buffer->bitmap.height, buffer->bitmap.memory, &buffer->info,
                 DIB_RGB_COLORS, SRCCOPY);
 }
 
@@ -144,29 +224,6 @@ Dim win32_get_window_dimensions(HWND window) {
       .width = clientRect.right - clientRect.left,
   };
   return result;
-}
-
-void draw_rectangle(Win32Buffer *buffer, int x, int y, int width, int height,
-                    Color color) {
-  // clip the rectangle to the edges of the buffer.
-  int minX = MAX(0, x);
-  int maxX = MAX(MIN(buffer->width, x + width), 0);
-  int minY = MAX(0, y);
-  int maxY = MAX(MIN(buffer->height, y + height), 0);
-
-  char *row = ((char *)buffer->memory + (minX * BYTES_PER_PIXEL) +
-               (minY * buffer->pitch));
-  for (int y = minY; y < maxY; y++) {
-    unsigned int *pixel = (unsigned int *)row;
-    for (int x = minX; x < maxX; x++) {
-      int a_value = color.a * 255;
-      int r_value = color.r * 255;
-      int g_value = color.g * 255;
-      int b_value = color.b * 255;
-      *pixel++ = ((a_value << 24) | (r_value << 16) | (g_value << 8) | b_value);
-    }
-    row += buffer->pitch;
-  }
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
@@ -203,27 +260,28 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   global_running = true;
 
   Win32Buffer global_backbuffer = {
-      .width = 960,
-      .height = 540,
-      .pitch = global_backbuffer.width * BYTES_PER_PIXEL,
-      .memory = VirtualAlloc(
+      .bitmap.width = 960,
+      .bitmap.height = 540,
+      .bitmap.pitch = global_backbuffer.bitmap.width * BYTES_PER_PIXEL,
+      .bitmap.memory = VirtualAlloc(
           0,
-          global_backbuffer.width * global_backbuffer.height * BYTES_PER_PIXEL,
+          global_backbuffer.bitmap.width * global_backbuffer.bitmap.height * BYTES_PER_PIXEL,
           MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE),
   };
 
-  assert(global_backbuffer.memory);
-
   BITMAPINFO info = {.bmiHeader = {
                          .biSize = sizeof(global_backbuffer.info.bmiHeader),
-                         .biWidth = global_backbuffer.width,
-                         .biHeight = global_backbuffer.height,
+                         .biWidth = global_backbuffer.bitmap.width,
+                         .biHeight = global_backbuffer.bitmap.height,
                          .biPlanes = 1,
                          .biBitCount = BYTES_PER_PIXEL * 8,
                          .biCompression = BI_RGB,
                      }};
-
   global_backbuffer.info = info;
+  global_backbuffer.bitmap.memory = VirtualAlloc(
+      0, global_backbuffer.bitmap.width * global_backbuffer.bitmap.height * BYTES_PER_PIXEL,
+      MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+  assert(global_backbuffer.bitmap.memory);
 
   WNDCLASS wc = {.lpfnWndProc = WindowProc,
                  .hInstance = hInstance,
@@ -247,8 +305,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   NPC tim = {.Name = "Tim",
              .x = 400,
              .y = 300,
-             .color = color(0.55f, 0.25f, 0.8f, 1.0f)};
+             .color = v4(0.55f, 0.25f, 0.8f, 1.0f)};
   Player player = {.x = 200, .y = 200, .speed = 20};
+  LoadedBitmap guy_bmp = load_bitmap("..\\assets\\guy.bmp");
+
+  int playerX = 200;
+  int playerY = 200;
+  int player_speed = 20;
 
   Input input = {0};
   while (global_running) {
@@ -264,15 +327,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
 
-    const Color background = state == OVERWORLD ? color(0.0f, 0.0f, 0.2f, 1.0f)
-                                                : color(0.5f, 0.9f, 0.6f, 1.0f);
+    const V4 background = state == OVERWORLD ? v4(0.0f, 0.0f, 0.2f, 1.0f)
+                                                : v4(0.5f, 0.9f, 0.6f, 1.0f);
 
     // clear screen
-    draw_rectangle(&global_backbuffer, 0, 0, dim.width, dim.height, background);
+    draw_rectangle(&global_backbuffer.bitmap, 0, 0, dim.width, dim.height,
+                   v4(0.0f, 0.0f, 0.2f, 1.0f));
 
     // draw player
-    draw_rectangle(&global_backbuffer, player.x, player.y, 30, 30,
-                   color(1.0f, 0.0f, 0.0f, 1.0f));
+    draw_bitmap(&global_backbuffer.bitmap, &guy_bmp, player.x, player.y);
 
     if (state == OVERWORLD) {
       // draw TIM
