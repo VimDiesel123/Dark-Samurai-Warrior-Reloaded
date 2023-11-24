@@ -548,16 +548,20 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     // draw UI
     V2 buttonPos = {50, 50};
-    if (button(&ui, 69, &global_backbuffer.bitmap, buttonPos, 100, 100,
-               v4(1.0, 0.0, 0.0, 1.0))) {
-      // If I click this red button dawg, everybody heaven's gated.
+    V4 buttonColor = v4(1.0, 0.0, 0.0, 1.0);
+    const char *buttonText = state == OVERWORLD ? "Overworld" : "Battle";
+    int buttonWidth = 150;
+    int buttonHeight = 150;
+    if (button(&ui, 69, &global_backbuffer.bitmap, buttonPos, buttonWidth,
+               buttonHeight, buttonColor, &test_font, buttonText)) {
+      // If I press this red button dawg, everybody heaven's gated.
       state = state == OVERWORLD ? BATTLE : OVERWORLD;
     }
 
     // draw player
     draw_bitmap(&global_backbuffer.bitmap, &guy_bmp, player.x, player.y);
 
-    draw_string(&global_backbuffer.bitmap, test_font, 100, 100,
+    draw_string(&global_backbuffer.bitmap, &test_font, 350, 350,
                 "sneed's feed and seed\nformerly chuck's");
 
     if (state == OVERWORLD) {

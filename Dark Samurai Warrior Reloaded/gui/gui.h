@@ -14,4 +14,4 @@ typedef struct UI {
 } UI;
 
 bool button(UI* context, u64 id, LoadedBitmap* bitmap, V2 pos, int width,
-            int height, Color color);
+            int height, Color color, Font* font, const char* text);
