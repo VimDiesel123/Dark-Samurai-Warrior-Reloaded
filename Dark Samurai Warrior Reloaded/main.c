@@ -35,6 +35,7 @@ typedef struct Input {
   bool tabEndedDown;
   DWORD lastInputTime;
   MouseInput mouseInput;
+  float seconds_per_frame;
 } Input;
 
 typedef enum State { OVERWORLD, BATTLE } State;
@@ -54,6 +55,11 @@ typedef struct Player {
 
 static Win32Buffer global_backbuffer;
 static bool global_running;
+// NOTE: This is a value that tells you how often Windows queries performance
+// counters. It is determined at system boot and never changes, so it only needs
+// to be set once at startup. Read more here:
+// https://learn.microsoft.com/en-us/windows/win32/api/profileapi/nf-profileapi-queryperformancefrequency
+static u32 performance_frequency;
 
 typedef struct LoadedFile {
   size_t size;
@@ -84,6 +90,148 @@ typedef struct BitmapHeader {
   u32 blue_mask;
 } BitmapHeader;
 #pragma pack(pop)
+
+Glyph win32_get_glyph(Font *font, char *font_name, u32 code_point) {
+  Glyph result = {.bitmap = (LoadedBitmap *)malloc(sizeof(LoadedBitmap))};
+  int max_width = 256;
+  int max_height = 256;
+  HDC dc = 0;
+  TEXTMETRIC text_metric = {0};
+  HBITMAP bitmap = 0;
+  HFONT hfont = 0;
+  VOID *bits = 0;
+  if (!dc) {
+    hfont = CreateFontA(32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                        CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                        DEFAULT_PITCH | FF_DONTCARE, font_name);
+    assert(hfont);
+    dc = CreateCompatibleDC(GetDC(0));
+    BITMAPINFO info = {
+        .bmiHeader =
+            {
+                .biSize = sizeof(info.bmiHeader),
+                .biWidth = max_width,
+                .biHeight = max_height,
+                .biPlanes = 1,
+                .biBitCount = 32,
+                .biCompression = BI_RGB,
+            },
+    };
+    bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits, 0, 0);
+    SelectObject(dc, bitmap);
+    SelectObject(dc, hfont);
+    SetBkColor(dc, RGB(0, 0, 0));
+    GetTextMetrics(dc, &text_metric);
+  }
+
+  SIZE size;
+  wchar_t cheese_point = (wchar_t)code_point;
+  assert(GetTextExtentPoint32W(dc, &cheese_point, 1, &size));
+  int width = MIN(size.cx, max_width);
+  int height = MIN(size.cy, max_height);
+  // TODO: Specify color
+  SetTextColor(dc, RGB(255, 255, 255));
+  assert(TextOut(dc, 0, 0, &cheese_point, 1));
+
+  int max_x = INT16_MIN;
+  int max_y = INT16_MIN;
+  int min_x = INT16_MAX;
+  int min_y = INT16_MAX;
+
+  // NOTE: Preadvancing by max_height - 1 because I want to start at the last
+  // row of the bitmap and go up with each iteration of y.
+  u32 *row = (u32 *)bits + (max_height - 1) * max_width;
+  // We drew the glyph in a bitmap that is too large for it, now we find the
+  // bounding box for the non-zero pixel values.
+  for (int y = 0; y < height; y++) {
+    u32 *pixel = row;
+    for (int x = 0; x < width; x++) {
+      if (*pixel != 0) {
+        max_x = max(max_x, x);
+        max_y = max(max_y, y);
+        min_x = min(min_x, x);
+        min_y = min(min_y, y);
+      }
+      pixel++;
+    }
+    row -= max_width;
+  }
+
+  width = max_x - min_x + 1;
+  height = max_y - min_y + 1;
+
+  result.bitmap->width = width;
+  result.bitmap->height = height;
+  result.bitmap->pitch = result.bitmap->width * BYTES_PER_PIXEL;
+  size_t bitmap_size = width * height * BYTES_PER_PIXEL;
+  result.bitmap->memory = malloc(bitmap_size);
+  memset(result.bitmap->memory, 0, sizeof(bitmap_size));
+
+  char *dest_row =
+      (char *)result.bitmap->memory + (height - 1) * result.bitmap->pitch;
+  for (int y = min_y; y <= max_y; y++) {
+    u32 *dest = (u32 *)dest_row;
+    for (int x = min_x; x <= max_x; x++) {
+      // TODO: cleartype antialiasing
+      COLORREF pixel = GetPixel(dc, x, y);
+      u32 alpha = ((pixel >> 16) & 0xFF);
+
+      u32 color = ((alpha << 24) | (alpha << 16) | (alpha << 8) | (alpha << 0));
+      *dest++ = color;
+    }
+    dest_row -= result.bitmap->pitch;
+  }
+
+  // TODO: Support non mono-spaced fonts. To do this I believe I will need to
+  // extract the entire kerning table for the font and store it in some kind of
+  // hash table or array of pairs to look up later when drawing the fonts.
+  ABC abc;
+  assert(GetCharABCWidthsA(dc, code_point, code_point, &abc));
+
+  if (!font->advance_width)
+    font->advance_width = abc.abcA + abc.abcB + abc.abcC;
+  if (!font->line_gap)
+    font->line_gap = text_metric.tmHeight + text_metric.tmExternalLeading;
+
+  result.ascent = max_y - (size.cy - text_metric.tmDescent);
+
+  DeleteObject(bitmap);
+  DeleteObject(hfont);
+  if (dc) {
+    DeleteDC(dc);
+    dc = 0;
+  }
+
+  return result;
+}
+
+Font win32_load_font(char *font_name) {
+  Font result = {0};
+  // TODO: I am only loading the "drawable" ASCII characters.
+  for (char c = '!'; c < '~'; c++) {
+    result.glyphs[c] = win32_get_glyph(&result, font_name, (wchar_t)(c));
+  }
+  return result;
+}
+
+inline void win32_initialize_performance_frequency() {
+  LARGE_INTEGER performance_frequency_result;
+  QueryPerformanceFrequency(&performance_frequency_result);
+  performance_frequency = performance_frequency_result.QuadPart;
+}
+
+inline LARGE_INTEGER win32_get_wall_clock() {
+  LARGE_INTEGER result;
+  QueryPerformanceCounter(&result);
+  return result;
+}
+
+inline float win32_get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end) {
+  float result =
+      ((float)(end.QuadPart - start.QuadPart) / (float)performance_frequency);
+  return result;
+}
 
 LoadedFile win32_load_file(char *filename) {
   LoadedFile result = {0};
@@ -133,7 +281,6 @@ LoadedBitmap load_bitmap(char *filename) {
     for (int x = 0; x < result.width; x++) {
       u32 color = *source;
 
-      // TODO: Premultiply alpha
       float red_value = (color & red_mask) >> red_index;
       float green_value = (color & green_mask) >> green_index;
       float blue_value = (color & blue_mask) >> blue_index;
@@ -206,7 +353,7 @@ win32_handle_mouse_down(MSG *msg, Input *input) {
   input->mouseInput.up = false;
 }
 
-win32_handle_mouse_up(MSG* msg, Input* input){
+win32_handle_mouse_up(MSG *msg, Input *input) {
   input->mouseInput.down = false;
   input->mouseInput.up = true;
 }
@@ -223,7 +370,7 @@ void win32_process_messages(Input *input) {
         win32_handle_mouse_move(&msg, input);
         break;
       }
-      case WM_LBUTTONDOWN:{
+      case WM_LBUTTONDOWN: {
         win32_handle_mouse_down(&msg, input);
         break;
       }
@@ -301,6 +448,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     PWSTR pCmdLine, int nCmdShow) {
   global_running = true;
 
+  win32_initialize_performance_frequency();
+
+  Font test_font = win32_load_font("Consolas");
+
   Win32Buffer global_backbuffer = {
       .bitmap.width = 960,
       .bitmap.height = 540,
@@ -321,11 +472,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                          .biCompression = BI_RGB,
                      }};
   global_backbuffer.info = info;
-  global_backbuffer.bitmap.memory =
-      VirtualAlloc(0,
-                   global_backbuffer.bitmap.width *
-                       global_backbuffer.bitmap.height * BYTES_PER_PIXEL,
-                   MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   assert(global_backbuffer.bitmap.memory);
 
   WNDCLASS wc = {.lpfnWndProc = WindowProc,
@@ -345,6 +491,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   ShowWindow(hwnd, nCmdShow);
 
+  float target_seconds_per_frame = 1.0f / 60.0f;
+
+  LARGE_INTEGER last_counter = win32_get_wall_clock();
+
+  UINT desired_scheduler_ms = 1;
+  bool sleep_is_granular =
+      timeBeginPeriod(desired_scheduler_ms) == TIMERR_NOERROR;
+
   State state = OVERWORLD;
 
   NPC tim = {
@@ -360,8 +514,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   Input input = {0};
   while (global_running) {
+    input.seconds_per_frame = target_seconds_per_frame;
+
     reset_input(&input);
     win32_process_messages(&input);
+
+    LARGE_INTEGER counter = win32_get_wall_clock();
 
     if (input.leftEndedDown) player.x -= player.speed;
     if (input.rightEndedDown) player.x += player.speed;
@@ -373,34 +531,61 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     ui.mouseButtonDown = input.mouseInput.down;
     ui.mouseButtonUp = input.mouseInput.up;
 
-    // TODO: (David) figure out the best way to handle y coords. 
-    // For now, translate y value to account for 0,0 being bottom left instead of top left
+    // TODO: (David) figure out the best way to handle y coords.
+    // For now, translate y value to account for 0,0 being bottom left instead
+    // of top left
     ui.mousePos.y = global_backbuffer.bitmap.height - ui.mousePos.y;
 
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
 
-    const V4 background = state == OVERWORLD ? v4(0.0f, 0.0f, 0.2f, 1.0f)
-                                             : v4(0.5f, 0.9f, 0.6f, 1.0f);
+    const V4 background = state == OVERWORLD ? v4(0.5f, 0.9f, 0.6f, 1.0f)
+                                             : v4(0.0f, 0.0f, 0.2f, 1.0f);
 
     // clear screen
     draw_rectangle(&global_backbuffer.bitmap, 0, 0, dim.width, dim.height,
                    background);
 
     // draw UI
-    V2 buttonPos = { 50, 50};
-    if(button(&ui, 69, &global_backbuffer.bitmap, buttonPos, 100, 100, v4(1.0, 0.0, 0.0, 1.0))){
-      //If I click this red button dawg, everybody heaven's gated.
+    V2 buttonPos = {50, 50};
+    if (button(&ui, 69, &global_backbuffer.bitmap, buttonPos, 100, 100,
+               v4(1.0, 0.0, 0.0, 1.0))) {
+      // If I click this red button dawg, everybody heaven's gated.
       state = state == OVERWORLD ? BATTLE : OVERWORLD;
     }
 
     // draw player
     draw_bitmap(&global_backbuffer.bitmap, &guy_bmp, player.x, player.y);
 
+    draw_string(&global_backbuffer.bitmap, test_font, 100, 100,
+                "sneed's feed and seed\nformerly chuck's");
+
     if (state == OVERWORLD) {
       // draw TIM
-      draw_rectangle(&global_backbuffer, tim.x, tim.y, 20, 20, tim.color);
+      draw_rectangle(&global_backbuffer.bitmap, tim.x, tim.y, 20, 20,
+                     tim.color);
     }
+
+    // TODO: This frame-rate code is still very incomplete, but it is at least
+    // enforcing a frame rate for now.
+    LARGE_INTEGER work_counter = win32_get_wall_clock();
+    float seconds_elapsed_this_frame =
+        win32_get_seconds_elapsed(counter, work_counter);
+    if (seconds_elapsed_this_frame < target_seconds_per_frame) {
+      DWORD ms_to_sleep = (DWORD)(1000.f * (target_seconds_per_frame -
+                                            seconds_elapsed_this_frame));
+      if (ms_to_sleep) Sleep(ms_to_sleep);
+    } else {
+      // TODO: Missed Framerate. Should log here or something maybe.
+    }
+    LARGE_INTEGER end_counter = win32_get_wall_clock();
+    float frame_time =
+        1000.0f * win32_get_seconds_elapsed(counter, end_counter);
+    char frame_time_buffer[100];
+    sprintf_s(frame_time_buffer, sizeof(frame_time_buffer),
+              "Frame Time: %.2f \n", frame_time);
+    OutputDebugStringA(frame_time_buffer);
+    last_counter = end_counter;
 
     win32_display_buffer_in_window(&global_backbuffer, dc, dim.width,
                                    dim.height);

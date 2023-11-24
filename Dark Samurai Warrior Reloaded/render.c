@@ -1,7 +1,8 @@
 #pragma once
+#include "render.h"
+
 #include "common.h"
 #include "math.h"
-#include "render.h"
 
 inline V4 v4_color_from_u32(u32 color) {
   V4 result = {.r = (float)((color >> 16) & 0xFF) / 255.0f,
@@ -31,7 +32,7 @@ void draw_bitmap(LoadedBitmap *buffer, LoadedBitmap *bitmap, u32 pos_x,
     u32 *dest_pixel = (u32 *)dest_row;
     for (s32 x = 0; x < bitmap->width; x++) {
       u32 source_color_32 = *source_pixel;
-      u32 dest_color_32 = *dest_row;
+      u32 dest_color_32 = *dest_pixel;
 
       V4 source_color = v4_color_from_u32(source_color_32);
       V4 dest_color = v4_color_from_u32(dest_color_32);
@@ -75,5 +76,28 @@ void draw_rectangle(LoadedBitmap *buffer, int x, int y, int width, int height,
       *pixel++ = ((a_value << 24) | (r_value << 16) | (g_value << 8) | b_value);
     }
     row += buffer->pitch;
+  }
+}
+
+void draw_string(LoadedBitmap *buffer, Font *font, u32 x, u32 y, char *string) {
+  char *c = string;
+  Glyph *glyphs = font->glyphs;
+  s32 current_x = x;
+  s32 current_y = y;
+  while (*c) {
+    char character = *c;
+    // TODO: handle newlines
+    if (character == '\n') {
+      current_y -= font->line_gap;
+      current_x = x;
+      c++;
+      continue;
+    }
+    if (character >= '!' && character <= '~') {
+      Glyph glyph = *(glyphs + character);
+      draw_bitmap(buffer, glyph.bitmap, current_x, current_y - glyph.ascent);
+    }
+    current_x += font->advance_width;
+    c++;
   }
 }
