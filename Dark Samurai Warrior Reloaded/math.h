@@ -14,6 +14,10 @@ typedef union V4 {
   };
 } V4;
 
+typedef struct V2 {
+  float x, y;
+} V2;
+
 inline V4 v4(float r, float g, float b, float a) {
   assert(r <= 1.0f && r >= 0.0f);
   assert(g <= 1.0f && g >= 0.0f);

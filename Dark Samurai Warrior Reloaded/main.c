@@ -1,8 +1,11 @@
+#include <intrin.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <windows.h>
-#include <intrin.h>
+#include <windowsx.h>
+
 #include "common.h"
+#include "gui/gui.h"
 #include "math.h"
 #include "render.h"
 
@@ -18,6 +21,12 @@ typedef struct Dim {
   int height;
 } Dim;
 
+typedef struct MouseInput {
+  V2 pos;
+  bool down;
+  bool up;
+} MouseInput;
+
 typedef struct Input {
   bool leftEndedDown;
   bool rightEndedDown;
@@ -25,6 +34,7 @@ typedef struct Input {
   bool downEndedDown;
   bool tabEndedDown;
   DWORD lastInputTime;
+  MouseInput mouseInput;
 } Input;
 
 typedef enum State { OVERWORLD, BATTLE } State;
@@ -78,7 +88,7 @@ typedef struct BitmapHeader {
 LoadedFile win32_load_file(char *filename) {
   LoadedFile result = {0};
   HANDLE file_handle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, 0,
-                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
   assert(file_handle != INVALID_HANDLE_VALUE);
   LARGE_INTEGER file_size64;
   assert(GetFileSizeEx(file_handle, &file_size64) != INVALID_FILE_SIZE);
@@ -93,7 +103,7 @@ LoadedFile win32_load_file(char *filename) {
   return result;
 }
 
-LoadedBitmap load_bitmap(char* filename) { 
+LoadedBitmap load_bitmap(char *filename) {
   LoadedFile file = win32_load_file(filename);
   assert(file.size > 0);
   BitmapHeader *header = (BitmapHeader *)file.memory;
@@ -103,8 +113,9 @@ LoadedBitmap load_bitmap(char* filename) {
                          .height = header->height,
                          .pitch = header->width * (header->bits_per_pixel / 8)};
 
-  // There are multiple kinds of bitmap compression. We're only going to handle one kind right now, which is an uncompressed bitmap.
-  // For more info: https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv4header
+  // There are multiple kinds of bitmap compression. We're only going to handle
+  // one kind right now, which is an uncompressed bitmap. For more info:
+  // https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv4header
   assert(header->compression == 3);
 
   u32 red_mask = header->red_mask;
@@ -144,8 +155,6 @@ LoadedBitmap load_bitmap(char* filename) {
 
       *source++ = (((u32)alpha_value << 24) | ((u32)red_value << 16) |
                    ((u32)green_value << 8) | ((u32)blue_value));
-
-
     }
   }
   return result;
@@ -183,6 +192,25 @@ void win32_handle_key_input(MSG *msg, Input *input) {
   input->lastInputTime = currentTime;
 }
 
+win32_handle_mouse_move(MSG *msg, Input *input) {
+  int xPos = GET_X_LPARAM(msg->lParam);
+  int yPos = GET_Y_LPARAM(msg->lParam);
+
+  input->mouseInput.pos.x = xPos;
+  input->mouseInput.pos.y = yPos;
+  input->mouseInput.up = false;
+}
+
+win32_handle_mouse_down(MSG *msg, Input *input) {
+  input->mouseInput.down = msg->wParam == MK_LBUTTON;
+  input->mouseInput.up = false;
+}
+
+win32_handle_mouse_up(MSG* msg, Input* input){
+  input->mouseInput.down = false;
+  input->mouseInput.up = true;
+}
+
 void win32_process_messages(Input *input) {
   MSG msg = {0};
   while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -191,6 +219,18 @@ void win32_process_messages(Input *input) {
       case WM_KEYUP: {
         win32_handle_key_input(&msg, input);
       } break;
+      case WM_MOUSEMOVE: {
+        win32_handle_mouse_move(&msg, input);
+        break;
+      }
+      case WM_LBUTTONDOWN:{
+        win32_handle_mouse_down(&msg, input);
+        break;
+      }
+      case WM_LBUTTONUP: {
+        win32_handle_mouse_up(&msg, input);
+        break;
+      }
       default: {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
@@ -209,10 +249,12 @@ void win32_display_buffer_in_window(Win32Buffer *buffer, HDC hdc,
   PatBlt(hdc, 0, marginY + buffer->bitmap.height, windowWidth, windowHeight,
          BLACKNESS);
   PatBlt(hdc, 0, 0, marginX, windowHeight, BLACKNESS);
-  PatBlt(hdc, marginX + buffer->bitmap.width, 0, windowWidth, windowHeight, BLACKNESS);
+  PatBlt(hdc, marginX + buffer->bitmap.width, 0, windowWidth, windowHeight,
+         BLACKNESS);
 
-  StretchDIBits(hdc, marginX, marginY, buffer->bitmap.width, buffer->bitmap.height, 0, 0,
-                buffer->bitmap.width, buffer->bitmap.height, buffer->bitmap.memory, &buffer->info,
+  StretchDIBits(hdc, marginX, marginY, buffer->bitmap.width,
+                buffer->bitmap.height, 0, 0, buffer->bitmap.width,
+                buffer->bitmap.height, buffer->bitmap.memory, &buffer->info,
                 DIB_RGB_COLORS, SRCCOPY);
 }
 
@@ -263,10 +305,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       .bitmap.width = 960,
       .bitmap.height = 540,
       .bitmap.pitch = global_backbuffer.bitmap.width * BYTES_PER_PIXEL,
-      .bitmap.memory = VirtualAlloc(
-          0,
-          global_backbuffer.bitmap.width * global_backbuffer.bitmap.height * BYTES_PER_PIXEL,
-          MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE),
+      .bitmap.memory =
+          VirtualAlloc(0,
+                       global_backbuffer.bitmap.width *
+                           global_backbuffer.bitmap.height * BYTES_PER_PIXEL,
+                       MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE),
   };
 
   BITMAPINFO info = {.bmiHeader = {
@@ -278,9 +321,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                          .biCompression = BI_RGB,
                      }};
   global_backbuffer.info = info;
-  global_backbuffer.bitmap.memory = VirtualAlloc(
-      0, global_backbuffer.bitmap.width * global_backbuffer.bitmap.height * BYTES_PER_PIXEL,
-      MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+  global_backbuffer.bitmap.memory =
+      VirtualAlloc(0,
+                   global_backbuffer.bitmap.width *
+                       global_backbuffer.bitmap.height * BYTES_PER_PIXEL,
+                   MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   assert(global_backbuffer.bitmap.memory);
 
   WNDCLASS wc = {.lpfnWndProc = WindowProc,
@@ -302,16 +347,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
   State state = OVERWORLD;
 
-  NPC tim = {.Name = "Tim",
-             .x = 400,
-             .y = 300,
-             .color = v4(0.55f, 0.25f, 0.8f, 1.0f)};
+  NPC tim = {
+      .Name = "Tim", .x = 400, .y = 300, .color = v4(0.55f, 0.25f, 0.8f, 1.0f)};
   Player player = {.x = 200, .y = 200, .speed = 20};
   LoadedBitmap guy_bmp = load_bitmap("..\\assets\\guy.bmp");
 
   int playerX = 200;
   int playerY = 200;
   int player_speed = 20;
+
+  UI ui = {0};
 
   Input input = {0};
   while (global_running) {
@@ -324,15 +369,30 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     if (input.downEndedDown) player.y -= player.speed;
     if (input.tabEndedDown) state = state == OVERWORLD ? BATTLE : OVERWORLD;
 
+    ui.mousePos = input.mouseInput.pos;
+    ui.mouseButtonDown = input.mouseInput.down;
+    ui.mouseButtonUp = input.mouseInput.up;
+
+    // TODO: (David) figure out the best way to handle y coords. 
+    // For now, translate y value to account for 0,0 being bottom left instead of top left
+    ui.mousePos.y = global_backbuffer.bitmap.height - ui.mousePos.y;
+
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
 
     const V4 background = state == OVERWORLD ? v4(0.0f, 0.0f, 0.2f, 1.0f)
-                                                : v4(0.5f, 0.9f, 0.6f, 1.0f);
+                                             : v4(0.5f, 0.9f, 0.6f, 1.0f);
 
     // clear screen
     draw_rectangle(&global_backbuffer.bitmap, 0, 0, dim.width, dim.height,
-                   v4(0.0f, 0.0f, 0.2f, 1.0f));
+                   background);
+
+    // draw UI
+    V2 buttonPos = { 50, 50};
+    if(button(&ui, 69, &global_backbuffer.bitmap, buttonPos, 100, 100, v4(1.0, 0.0, 0.0, 1.0))){
+      //If I click this red button dawg, everybody heaven's gated.
+      state = state == OVERWORLD ? BATTLE : OVERWORLD;
+    }
 
     // draw player
     draw_bitmap(&global_backbuffer.bitmap, &guy_bmp, player.x, player.y);
