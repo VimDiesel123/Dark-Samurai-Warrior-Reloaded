@@ -1,7 +1,8 @@
 #pragma once
+#include "render.h"
+
 #include "common.h"
 #include "math.h"
-#include "render.h"
 
 inline V4 v4_color_from_u32(u32 color) {
   V4 result = {.r = (float)((color >> 16) & 0xFF) / 255.0f,
@@ -78,19 +79,25 @@ void draw_rectangle(LoadedBitmap *buffer, int x, int y, int width, int height,
   }
 }
 
-
-void draw_string(LoadedBitmap* buffer, Font *font, u32 x, u32 y, char* string) { 
+void draw_string(LoadedBitmap *buffer, Font *font, u32 x, u32 y, char *string) {
   char *c = string;
   Glyph *glyphs = font->glyphs;
   s32 current_x = x;
   s32 current_y = y;
   while (*c) {
     char character = *c;
-    assert(character >= '!' && character <= '~');
-    Glyph glyph = *(glyphs + character);
-    current_x += glyph.x_pre_step;
-    draw_bitmap(buffer, glyph.bitmap, current_x, current_y - glyph.ascent);
-    current_x += glyph.advance_width;
+    // TODO: handle newlines
+    if (character == '\n') {
+      current_y -= font->line_gap;
+      current_x = x;
+      c++;
+      continue;
+    }
+    if (character >= '!' && character <= '~') {
+      Glyph glyph = *(glyphs + character);
+      draw_bitmap(buffer, glyph.bitmap, current_x, current_y - glyph.ascent);
+    }
+    current_x += font->advance_width;
     c++;
   }
 }

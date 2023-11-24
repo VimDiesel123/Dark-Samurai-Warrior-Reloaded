@@ -8,11 +8,11 @@ typedef struct LoadedBitmap {
 
 typedef struct Glyph {
   LoadedBitmap *bitmap;
-  int advance_width;
   int ascent;
-  int x_pre_step;
 } Glyph;
 
 typedef struct Font {
   Glyph glyphs[128];
+  int advance_width;
+  int line_gap;
 } Font;

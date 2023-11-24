@@ -21,8 +21,6 @@
 
 #define BYTES_PER_PIXEL 4
 
-
-
 inline u32 bitscan_forward(u32 mask) {
   u64 result = 0;
   _BitScanForward(&result, mask);
