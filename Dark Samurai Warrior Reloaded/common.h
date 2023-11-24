@@ -7,6 +7,8 @@
     *(int *)0 = 0;   \
   }
 
+#define array_length(arr) (sizeof(arr) / sizeof(arr[0]))
+
 #define u8 uint8_t
 #define u16 uint16_t
 #define u32 uint32_t
