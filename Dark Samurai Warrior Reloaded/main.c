@@ -2,8 +2,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <windows.h>
+#include <windowsx.h>
 
 #include "common.h"
+#include "gui/gui.h"
 #include "math.h"
 #include "render.h"
 
@@ -19,6 +21,12 @@ typedef struct Dim {
   int height;
 } Dim;
 
+typedef struct MouseInput {
+  V2 pos;
+  bool down;
+  bool up;
+} MouseInput;
+
 typedef struct Input {
   bool leftEndedDown;
   bool rightEndedDown;
@@ -26,6 +34,7 @@ typedef struct Input {
   bool downEndedDown;
   bool tabEndedDown;
   DWORD lastInputTime;
+  MouseInput mouseInput;
   float seconds_per_frame;
 } Input;
 
@@ -330,6 +339,25 @@ void win32_handle_key_input(MSG *msg, Input *input) {
   input->lastInputTime = currentTime;
 }
 
+win32_handle_mouse_move(MSG *msg, Input *input) {
+  int xPos = GET_X_LPARAM(msg->lParam);
+  int yPos = GET_Y_LPARAM(msg->lParam);
+
+  input->mouseInput.pos.x = xPos;
+  input->mouseInput.pos.y = yPos;
+  input->mouseInput.up = false;
+}
+
+win32_handle_mouse_down(MSG *msg, Input *input) {
+  input->mouseInput.down = msg->wParam == MK_LBUTTON;
+  input->mouseInput.up = false;
+}
+
+win32_handle_mouse_up(MSG *msg, Input *input) {
+  input->mouseInput.down = false;
+  input->mouseInput.up = true;
+}
+
 void win32_process_messages(Input *input) {
   MSG msg = {0};
   while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -338,6 +366,18 @@ void win32_process_messages(Input *input) {
       case WM_KEYUP: {
         win32_handle_key_input(&msg, input);
       } break;
+      case WM_MOUSEMOVE: {
+        win32_handle_mouse_move(&msg, input);
+        break;
+      }
+      case WM_LBUTTONDOWN: {
+        win32_handle_mouse_down(&msg, input);
+        break;
+      }
+      case WM_LBUTTONUP: {
+        win32_handle_mouse_up(&msg, input);
+        break;
+      }
       default: {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
@@ -470,6 +510,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   int playerY = 200;
   int player_speed = 20;
 
+  UI ui = {0};
+
   Input input = {0};
   while (global_running) {
     input.seconds_per_frame = target_seconds_per_frame;
@@ -485,6 +527,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     if (input.downEndedDown) player.y -= player.speed;
     if (input.tabEndedDown) state = state == OVERWORLD ? BATTLE : OVERWORLD;
 
+    ui.mousePos = input.mouseInput.pos;
+    ui.mouseButtonDown = input.mouseInput.down;
+    ui.mouseButtonUp = input.mouseInput.up;
+
+    // TODO: (David) figure out the best way to handle y coords.
+    // For now, translate y value to account for 0,0 being bottom left instead
+    // of top left
+    ui.mousePos.y = global_backbuffer.bitmap.height - ui.mousePos.y;
+
     HDC dc = GetDC(hwnd);
     Dim dim = win32_get_window_dimensions(hwnd);
 
@@ -495,10 +546,22 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     draw_rectangle(&global_backbuffer.bitmap, 0, 0, dim.width, dim.height,
                    background);
 
+    // draw UI
+    V2 buttonPos = {50, 50};
+    V4 buttonColor = v4(1.0, 0.0, 0.0, 1.0);
+    const char *buttonText = state == OVERWORLD ? "Overworld" : "Battle";
+    int buttonWidth = 150;
+    int buttonHeight = 150;
+    if (button(&ui, 69, &global_backbuffer.bitmap, buttonPos, buttonWidth,
+               buttonHeight, buttonColor, &test_font, buttonText)) {
+      // If I press this red button dawg, everybody heaven's gated.
+      state = state == OVERWORLD ? BATTLE : OVERWORLD;
+    }
+
     // draw player
     draw_bitmap(&global_backbuffer.bitmap, &guy_bmp, player.x, player.y);
 
-    draw_string(&global_backbuffer.bitmap, test_font, 100, 100,
+    draw_string(&global_backbuffer.bitmap, &test_font, 350, 350,
                 "sneed's feed and seed\nformerly chuck's");
 
     if (state == OVERWORLD) {
@@ -513,8 +576,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     float seconds_elapsed_this_frame =
         win32_get_seconds_elapsed(counter, work_counter);
     if (seconds_elapsed_this_frame < target_seconds_per_frame) {
-      DWORD ms_to_sleep = (DWORD)(
-          1000.f * (target_seconds_per_frame - seconds_elapsed_this_frame));
+      DWORD ms_to_sleep = (DWORD)(1000.f * (target_seconds_per_frame -
+                                            seconds_elapsed_this_frame));
       if (ms_to_sleep) Sleep(ms_to_sleep);
     } else {
       // TODO: Missed Framerate. Should log here or something maybe.

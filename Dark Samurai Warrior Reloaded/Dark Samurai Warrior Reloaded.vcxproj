@@ -129,6 +129,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="gui\gui.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="render.c" />
   </ItemGroup>
@@ -137,6 +138,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h" />
+    <ClInclude Include="gui\gui.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="render.h" />
   </ItemGroup>
