@@ -22,3 +22,4 @@ typedef struct Input {
 } Input;
 
 void reset_input(Input *input);
+void win32_process_messages(Input *input);
