@@ -4,9 +4,10 @@
 #include <windows.h>
 #include <windowsx.h>
 
+#include "math.h"
+#include "input/input.h"
 #include "common.h"
 #include "gui/gui.h"
-#include "math.h"
 #include "render.h"
 
 #define DEBOUNCE_DELAY 100
@@ -20,24 +21,6 @@ typedef struct Dim {
   int width;
   int height;
 } Dim;
-
-typedef struct MouseInput {
-  V2 pos;
-  bool down;
-  bool up;
-} MouseInput;
-
-typedef struct Input {
-  bool leftEndedDown;
-  bool rightEndedDown;
-  bool upEndedDown;
-  bool downEndedDown;
-  bool tabEndedDown;
-  DWORD lastInputTime;
-  MouseInput mouseInput;
-  float seconds_per_frame;
-} Input;
-
 typedef enum State { OVERWORLD, BATTLE } State;
 
 typedef struct NPC {
@@ -436,13 +419,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
   return result;
 }
 
-void reset_input(Input *input) {
-  input->downEndedDown = 0;
-  input->leftEndedDown = 0;
-  input->rightEndedDown = 0;
-  input->upEndedDown = 0;
-  input->tabEndedDown = 0;
-}
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     PWSTR pCmdLine, int nCmdShow) {
