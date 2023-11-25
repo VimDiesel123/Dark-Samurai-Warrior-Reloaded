@@ -34,8 +34,12 @@ static int textHeight(Font font, const char* text) {
   return currentTallestCharacter;
 }
 
-bool successfullyClickedOn(const UI context, u64 id) {
+bool clickFinished(const UI context, u64 id) {
   return context.active == id && context.mouseButtonUp && context.focused == id;
+}
+
+bool clickStarted(const UI context, u64 id) {
+  return context.focused == id && context.mouseButtonDown;
 }
 bool button(UI* context, u64 id, LoadedBitmap* bitmap, V2 pos, int width,
             int height, Color color, Font* font, const char* text) {
@@ -44,10 +48,10 @@ bool button(UI* context, u64 id, LoadedBitmap* bitmap, V2 pos, int width,
   draw_string(bitmap, font, textPos.x, textPos.y, text);
 
   bool result = false;
-  if (successfullyClickedOn(*context, id)) {
+  if (clickFinished(*context, id)) {
     result = true;
     context->active = 0;
-  } else if (context->focused == id && context->mouseButtonDown)
+  } else if (clickStarted(*context, id))
     context->active = id;
 
   if (inside(context->mousePos, pos, width, height)) context->focused = id;
