@@ -8,20 +8,14 @@ static bool inside(V2 mousePos, V2 widgetPos, int widgetWidth,
          mousePos.y > widgetPos.y && mousePos.y < widgetPos.y + widgetHeight;
 }
 
-static int widgetMiddleHorizontal(const int xPos, const int width) {
-  return xPos + width / 2;
-}
-
 static int center(const int totalSpace, const int needed) {
   return (totalSpace - needed) / 2;
 }
 
-static V2 textPosition(Font font, const char* text, V2 widgetPosition,
+static V2 textPositionCenter(Font font, const char* text, V2 widgetPosition,
                        int widgetWidth, int widgetHeight) {
-  int tw = textWidth(font, text);
-  int th = textHeight(font, text);
-  int xPos = MAX(0, widgetPosition.x + center(widgetWidth, tw));
-  int yPos = MAX(0, widgetPosition.y + center(widgetHeight, th));
+  int xPos = MAX(0, widgetPosition.x + center(widgetWidth, textWidth(font, text)));
+  int yPos = MAX(0, widgetPosition.y + center(widgetHeight, textHeight(font, text)));
   return (V2){xPos, yPos};
 }
 
@@ -52,7 +46,7 @@ bool clickStarted(const UI context, u64 id) {
 bool button(UI* context, u64 id, LoadedBitmap* bitmap, V2 pos, int width,
             int height, Color color, Font* font, const char* text) {
   draw_rectangle(bitmap, pos.x, pos.y, width, height, color);
-  V2 textPos = textPosition(*font, text, pos, width, height);
+  V2 textPos = textPositionCenter(*font, text, pos, width, height);
   draw_string(bitmap, font, textPos.x, textPos.y, text);
 
   if (inside(context->mousePos, pos, width, height))
