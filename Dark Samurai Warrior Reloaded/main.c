@@ -4,20 +4,11 @@
 #include <windows.h>
 
 #include "common.h"
-#include "input/input.h"
-#include "math.h"
-#include "io/file.h"
 #include "gfx/gfx.h"
+#include "input/input.h"
+#include "io/file.h"
+#include "math.h"
 
-typedef struct Win32Buffer {
-  BITMAPINFO info;
-  LoadedBitmap bitmap;
-} Win32Buffer;
-
-typedef struct Dim {
-  int width;
-  int height;
-} Dim;
 typedef enum State { OVERWORLD, BATTLE } State;
 
 typedef struct NPC {
@@ -41,32 +32,6 @@ static bool global_running;
 // https://learn.microsoft.com/en-us/windows/win32/api/profileapi/nf-profileapi-queryperformancefrequency
 static u32 performance_frequency;
 
-
-#pragma pack(push, 1)
-typedef struct BitmapHeader {
-  u16 file_type;
-  u32 file_size;
-  u16 reserved1;
-  u16 reserved2;
-  u32 bitmap_offset;
-  u32 size;
-  s32 width;
-  s32 height;
-  u16 planes;
-  u16 bits_per_pixel;
-  u32 compression;
-  u32 size_of_bitmap;
-  s32 horz_resolution;
-  s32 vert_resolution;
-  u32 colors_used;
-  u32 colors_important;
-
-  u32 red_mask;
-  u32 green_mask;
-  u32 blue_mask;
-} BitmapHeader;
-#pragma pack(pop)
-
 inline void win32_initialize_performance_frequency() {
   LARGE_INTEGER performance_frequency_result;
   QueryPerformanceFrequency(&performance_frequency_result);
@@ -84,91 +49,6 @@ inline float win32_get_seconds_elapsed(LARGE_INTEGER start, LARGE_INTEGER end) {
       ((float)(end.QuadPart - start.QuadPart) / (float)performance_frequency);
   return result;
 }
-
-LoadedBitmap load_bitmap(char *filename) {
-  LoadedFile file = win32_load_file(filename);
-  assert(file.size > 0);
-  BitmapHeader *header = (BitmapHeader *)file.memory;
-  u32 *pixels = (u32 *)((char *)file.memory + header->bitmap_offset);
-  LoadedBitmap result = {.memory = pixels,
-                         .width = header->width,
-                         .height = header->height,
-                         .pitch = header->width * (header->bits_per_pixel / 8)};
-
-  // There are multiple kinds of bitmap compression. We're only going to handle
-  // one kind right now, which is an uncompressed bitmap. For more info:
-  // https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv4header
-  assert(header->compression == 3);
-
-  u32 red_mask = header->red_mask;
-  u32 green_mask = header->green_mask;
-  u32 blue_mask = header->blue_mask;
-  u32 alpha_mask = ~(red_mask | green_mask | blue_mask);
-
-  u32 red_index = bitscan_forward(red_mask);
-  u32 green_index = bitscan_forward(green_mask);
-  u32 blue_index = bitscan_forward(blue_mask);
-  u32 alpha_index = bitscan_forward(alpha_mask);
-
-  u32 *source = pixels;
-  for (int y = 0; y < result.height; y++) {
-    for (int x = 0; x < result.width; x++) {
-      u32 color = *source;
-
-      float red_value = (color & red_mask) >> red_index;
-      float green_value = (color & green_mask) >> green_index;
-      float blue_value = (color & blue_mask) >> blue_index;
-      float alpha_value = (color & alpha_mask) >> alpha_index;
-
-      red_value /= 255.0f;
-      green_value /= 255.0f;
-      blue_value /= 255.0f;
-      alpha_value /= 255.0f;
-
-      red_value *= alpha_value;
-      green_value *= alpha_value;
-      blue_value *= alpha_value;
-
-      red_value *= 255.0f;
-      green_value *= 255.0f;
-      blue_value *= 255.0f;
-      alpha_value *= 255.0f;
-
-      *source++ = (((u32)alpha_value << 24) | ((u32)red_value << 16) |
-                   ((u32)green_value << 8) | ((u32)blue_value));
-    }
-  }
-  return result;
-}
-void win32_display_buffer_in_window(Win32Buffer *buffer, HDC hdc,
-                                    int windowWidth, int windowHeight) {
-  int marginX = 10;
-  int marginY = 10;
-
-  // Draw black rectangles around the edges of the buffer to add "margin"
-  PatBlt(hdc, 0, 0, windowWidth, marginY, BLACKNESS);
-  PatBlt(hdc, 0, marginY + buffer->bitmap.height, windowWidth, windowHeight,
-         BLACKNESS);
-  PatBlt(hdc, 0, 0, marginX, windowHeight, BLACKNESS);
-  PatBlt(hdc, marginX + buffer->bitmap.width, 0, windowWidth, windowHeight,
-         BLACKNESS);
-
-  StretchDIBits(hdc, marginX, marginY, buffer->bitmap.width,
-                buffer->bitmap.height, 0, 0, buffer->bitmap.width,
-                buffer->bitmap.height, buffer->bitmap.memory, &buffer->info,
-                DIB_RGB_COLORS, SRCCOPY);
-}
-
-Dim win32_get_window_dimensions(HWND window) {
-  RECT clientRect;
-  GetClientRect(window, &clientRect);
-  Dim result = {
-      .height = clientRect.bottom - clientRect.top,
-      .width = clientRect.right - clientRect.left,
-  };
-  return result;
-}
-
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                             LPARAM lParam) {
   LRESULT result = 0;
