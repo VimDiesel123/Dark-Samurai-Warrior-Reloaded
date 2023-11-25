@@ -9,18 +9,5 @@ typedef struct LoadedBitmap {
   void* memory;
 } LoadedBitmap;
 
-typedef struct Glyph {
-  LoadedBitmap* bitmap;
-  int ascent;
-} Glyph;
-
-typedef struct Font {
-  Glyph glyphs[128];
-  int advance_width;
-  int line_gap;
-} Font;
-
 void draw_rectangle(LoadedBitmap* buffer, int x, int y, int width, int height,
                     V4 color);
-
-void draw_string(LoadedBitmap* buffer, Font* font, u32 x, u32 y, char* string);
