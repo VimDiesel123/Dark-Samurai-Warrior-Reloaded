@@ -398,10 +398,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   Player player = {.x = 200, .y = 200, .speed = 20};
   LoadedBitmap guy_bmp = load_bitmap("..\\assets\\guy.bmp");
 
-  int playerX = 200;
-  int playerY = 200;
-  int player_speed = 20;
-
   UI ui = {0};
 
   Input input = {0};
