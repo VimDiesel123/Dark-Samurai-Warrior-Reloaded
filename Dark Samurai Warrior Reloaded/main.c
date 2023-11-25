@@ -4,12 +4,10 @@
 #include <windows.h>
 
 #include "common.h"
-#include "font/font.h"
-#include "gui/gui.h"
 #include "input/input.h"
 #include "math.h"
-#include "render.h"
 #include "io/file.h"
+#include "gfx/gfx.h"
 
 typedef struct Win32Buffer {
   BITMAPINFO info;

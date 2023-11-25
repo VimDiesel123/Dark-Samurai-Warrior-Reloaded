@@ -1,6 +1,6 @@
 #pragma once
-#include "common.h"
-#include "math.h"
+#include "../common.h"
+#include "../math.h"
 
 typedef struct LoadedBitmap {
   int width;

@@ -1,8 +1,8 @@
 #pragma once
 #include <stdbool.h>
 
-#include "../common.h"
-#include "../math.h"
+#include "../../common.h"
+#include "../../math.h"
 #include "../font/font.h"
 
 typedef V4 Color;

@@ -1,8 +1,4 @@
-#pragma once
 #include "render.h"
-
-#include "common.h"
-#include "math.h"
 
 inline V4 v4_color_from_u32(u32 color) {
   V4 result = {.r = (float)((color >> 16) & 0xFF) / 255.0f,
