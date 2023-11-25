@@ -39,14 +39,14 @@ static int textHeight(const Font font, const char* text) {
   return currentTallestCharacter;
 }
 
-bool clickFinished(const UI context, const u64 id) {
+bool clickFinished(const UI context, const ID id) {
   return context.active == id && context.mouseButtonUp && context.focused == id;
 }
 
-bool clickStarted(const UI context, const u64 id) {
+bool clickStarted(const UI context, const ID id) {
   return context.focused == id && context.mouseButtonDown;
 }
-bool button(UI* context, const u64 id, LoadedBitmap* bitmap, const V2 pos,
+bool button(UI* context, const ID id, LoadedBitmap* bitmap, const V2 pos,
             const int width, const int height, const Color color,
             const Font* font, const char* text) {
   draw_rectangle(bitmap, pos.x, pos.y, width, height, color);
