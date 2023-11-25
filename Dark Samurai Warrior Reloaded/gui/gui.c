@@ -14,18 +14,13 @@ static V2 textPosition(Font font, const char* text, V2 widgetPosition,
   int th = textHeight(font, text);
   int xPos = MAX(0, widgetPosition.x + widgetWidth / 2 - tw / 2);
   int yPos = MAX(0, widgetPosition.y + widgetHeight / 2 - th / 2);
-  V2 result = {xPos, yPos};
-  return result;
+  return (V2){xPos, yPos};
 }
 
 static int textWidth(Font font, const char* text) {
-  int result = 0;
   size_t length = strlen(text);
-  for (size_t i = 0; i < length; ++i) {
-    char currentCharacter = text[i];
-    result += font.advance_width;
-  }
-  return result;
+  // TODO: (David) This only works because the font is monospaced;
+  return length * font.advance_width;
 }
 
 static int textHeight(Font font, const char* text) {
