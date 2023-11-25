@@ -132,6 +132,7 @@
     <ClCompile Include="font\font.c" />
     <ClCompile Include="gui\gui.c" />
     <ClCompile Include="input\input.c" />
+    <ClCompile Include="io\file.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="math.c" />
     <ClCompile Include="render.c" />
@@ -144,6 +145,7 @@
     <ClInclude Include="font\font.h" />
     <ClInclude Include="gui\gui.h" />
     <ClInclude Include="input\input.h" />
+    <ClInclude Include="io\file.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="render.h" />
   </ItemGroup>
