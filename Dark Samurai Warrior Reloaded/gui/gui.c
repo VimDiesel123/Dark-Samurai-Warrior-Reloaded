@@ -8,12 +8,20 @@ static bool inside(V2 mousePos, V2 widgetPos, int widgetWidth,
          mousePos.y > widgetPos.y && mousePos.y < widgetPos.y + widgetHeight;
 }
 
+static int widgetMiddleHorizontal(const int xPos, const int width) {
+  return xPos + width / 2;
+}
+
+static int center(const int totalSpace, const int needed) {
+  return (totalSpace - needed) / 2;
+}
+
 static V2 textPosition(Font font, const char* text, V2 widgetPosition,
                        int widgetWidth, int widgetHeight) {
   int tw = textWidth(font, text);
   int th = textHeight(font, text);
-  int xPos = MAX(0, widgetPosition.x + widgetWidth / 2 - tw / 2);
-  int yPos = MAX(0, widgetPosition.y + widgetHeight / 2 - th / 2);
+  int xPos = MAX(0, widgetPosition.x + center(widgetWidth, tw));
+  int yPos = MAX(0, widgetPosition.y + center(widgetHeight, th));
   return (V2){xPos, yPos};
 }
 
