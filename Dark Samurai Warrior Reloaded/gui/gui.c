@@ -47,14 +47,15 @@ bool button(UI* context, u64 id, LoadedBitmap* bitmap, V2 pos, int width,
   V2 textPos = textPosition(*font, text, pos, width, height);
   draw_string(bitmap, font, textPos.x, textPos.y, text);
 
-  bool result = false;
+  if (inside(context->mousePos, pos, width, height))
+    context->focused = id;
+  else
+    context->focused = 0;
   if (clickFinished(*context, id)) {
-    result = true;
     context->active = 0;
-  } else if (clickStarted(*context, id))
+    return true;
+  } else if (clickStarted(*context, id)) {
     context->active = id;
-
-  if (inside(context->mousePos, pos, width, height)) context->focused = id;
-
-  return result;
+    return false;
+  }
 }
