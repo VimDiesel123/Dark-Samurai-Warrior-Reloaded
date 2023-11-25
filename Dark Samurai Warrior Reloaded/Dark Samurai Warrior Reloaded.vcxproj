@@ -129,18 +129,26 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="gui\gui.c" />
+    <ClCompile Include="gfx\font\font.c" />
+    <ClCompile Include="gfx\gui\gui.c" />
+    <ClCompile Include="input\input.c" />
+    <ClCompile Include="io\file.c" />
     <ClCompile Include="main.c" />
-    <ClCompile Include="render.c" />
+    <ClCompile Include="math.c" />
+    <ClCompile Include="gfx\render.c" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\assets\guy.bmp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h" />
-    <ClInclude Include="gui\gui.h" />
+    <ClInclude Include="gfx\font\font.h" />
+    <ClInclude Include="gfx\gfx.h" />
+    <ClInclude Include="gfx\gui\gui.h" />
+    <ClInclude Include="input\input.h" />
+    <ClInclude Include="io\file.h" />
     <ClInclude Include="math.h" />
-    <ClInclude Include="render.h" />
+    <ClInclude Include="gfx\render.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

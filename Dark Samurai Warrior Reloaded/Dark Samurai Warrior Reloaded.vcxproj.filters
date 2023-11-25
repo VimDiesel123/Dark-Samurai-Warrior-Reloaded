@@ -20,6 +20,18 @@
     <ClCompile Include="render.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="gui\gui.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="input\input.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="math.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="font\font.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\assets\guy.bmp">
@@ -34,6 +46,15 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="render.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gui\gui.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="input\input.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="font\font.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
